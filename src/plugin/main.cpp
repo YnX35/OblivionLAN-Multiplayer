@@ -7,6 +7,7 @@
 #include <array>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -287,6 +288,9 @@ DWORD WINAPI NetworkWorker(void*)
             return 0;
         }
 
+        DWORD handshakeTimeoutMs = 5000;
+        setsockopt(peer, SOL_SOCKET, SO_RCVTIMEO,
+            reinterpret_cast<const char*>(&handshakeTimeoutMs), sizeof(handshakeTimeoutMs));
         if (!acceptHello(peer))
         {
             Log("Network error: invalid client handshake.");
@@ -295,6 +299,9 @@ DWORD WINAPI NetworkWorker(void*)
             WSACleanup();
             return 0;
         }
+        handshakeTimeoutMs = 0;
+        setsockopt(peer, SOL_SOCKET, SO_RCVTIMEO,
+            reinterpret_cast<const char*>(&handshakeTimeoutMs), sizeof(handshakeTimeoutMs));
         Log("LAN handshake successful: client connected to Oblivion host.");
         KeepConnectionUntilClosed(peer);
     }
@@ -342,6 +349,11 @@ DWORD WINAPI NetworkWorker(void*)
             WSACleanup();
             return 0;
         }
+        timeoutMs = 0;
+        setsockopt(peer, SOL_SOCKET, SO_RCVTIMEO,
+            reinterpret_cast<const char*>(&timeoutMs), sizeof(timeoutMs));
+        setsockopt(peer, SOL_SOCKET, SO_SNDTIMEO,
+            reinterpret_cast<const char*>(&timeoutMs), sizeof(timeoutMs));
         Log("LAN handshake successful: Oblivion client connected to host.");
         KeepConnectionUntilClosed(peer);
     }
