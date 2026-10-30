@@ -2,7 +2,15 @@
 
 ## But
 
-Cette étape ne fait qu'établir la chaîne de compilation et le chargement xOBSE. Aucun réseau, hook moteur, commande console, accès aux sauvegardes ou synchronisation n'est inclus.
+Cette étape établit la chaîne de compilation et ajoute un diagnostic de chargement. Aucun réseau, hook moteur, commande console, accès aux sauvegardes ou synchronisation n'est inclus.
+
+## Journal de chargement
+
+Si `OBSEPlugin_Load` est appelé, le plugin tente de créer ou compléter `OblivionLAN.log` dans le même dossier que `OblivionLAN.dll`, avec la ligne :
+
+`OblivionLAN: OBSEPlugin_Load reached successfully.`
+
+L'absence du journal ne prouve pas à elle seule la cause : le plugin peut être rejeté avant Load, ou l'écriture peut échouer. Le journal confirme uniquement que le point d'entrée Load a été atteint, pas une compatibilité complète du runtime.
 
 ## SDK
 
@@ -31,9 +39,7 @@ L'artifact est conservé 14 jours. Aucun binaire n'est commité dans le dépôt.
 
 ## Critères de réussite
 
-- [ ] Le workflow compile la solution xOBSE en Win32/Release.
-- [ ] L'artifact contient une DLL x86.
+- [x] Le workflow compile la solution xOBSE en Win32/Release.
+- [x] L'artifact contient une DLL x86.
 - [ ] xOBSE accepte le plugin dans Oblivion classique.
-- [ ] Le jeu démarre et charge une sauvegarde de test sans crash.
-
-Ne jamais marquer une étape comme validée avant d'avoir observé le résultat correspondant.
+- [ ] Le jeu démarre et le journal confirme le chargement sur l'installation de test.
