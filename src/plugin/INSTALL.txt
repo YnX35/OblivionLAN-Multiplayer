@@ -1,0 +1,23 @@
+OblivionLAN — premier plugin de test
+
+Cible : The Elder Scrolls IV: Oblivion classique, xOBSE, Win32.
+Ce plugin ne contient encore aucune fonction multijoueur.
+
+Installation de test :
+1. Fermer Oblivion.
+2. Faire une copie de sauvegarde du dossier Data\OBSE\Plugins s'il existe.
+3. Copier OblivionLAN.dll dans :
+   <dossier Oblivion>\Data\OBSE\Plugins\
+4. Lancer le jeu avec obse_loader.exe.
+5. Vérifier que le jeu arrive au menu et qu'une sauvegarde de test se charge.
+6. Consulter obse.log / les journaux xOBSE si le chargement échoue.
+
+Ne pas tester d'abord sur une sauvegarde importante.
+Retirer OblivionLAN.dll pour désactiver ce premier plugin.
+
+Validation attendue :
+- Le build GitHub Actions doit réussir en Win32 Release.
+- Le jeu doit démarrer avec le plugin présent.
+- Le journal xOBSE doit confirmer le chargement du plugin, sans erreur de version.
+
+Un build réussi ne prouve pas encore le chargement en jeu.
