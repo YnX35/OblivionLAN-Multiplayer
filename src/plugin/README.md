@@ -1,45 +1,22 @@
-# Premier plugin xOBSE
+# Plugin xOBSE avec première connexion LAN
 
-## But
+## État
 
-Cette étape établit la chaîne de compilation et ajoute un diagnostic de chargement. Aucun réseau, hook moteur, commande console, accès aux sauvegardes ou synchronisation n'est inclus.
+Le plugin contient maintenant une couche réseau TCP optionnelle, activée par un fichier `OblivionLAN.ini` placé à côté de `OblivionLAN.dll`.
 
-## Journal de chargement
+- `Mode=disabled` : réseau désactivé.
+- `Mode=host` : écoute sur le port TCP configuré et accepte un client.
+- `Mode=client` : se connecte à l'adresse IPv4 configurée.
+- Le protocole est compatible avec le prototype autonome : en-tête `OLAN`, version 1, HELLO/WELCOME, tailles bornées.
+- Le travail réseau s'exécute dans un thread distinct ; il n'appelle pas le moteur Oblivion.
+- Le plugin maintient la connexion ouverte après le handshake et écrit les événements dans `OblivionLAN.log`.
 
-Si `OBSEPlugin_Load` est appelé, le plugin tente de créer ou compléter `OblivionLAN.log` dans le même dossier que `OblivionLAN.dll`, avec la ligne :
+## Limites importantes
 
-`OblivionLAN: OBSEPlugin_Load reached successfully.`
+Cette étape n'envoie aucune position de joueur et ne crée pas d'avatar distant. Le thread réseau ne doit pas être utilisé pour appeler des fonctions du moteur. La connexion intégrée doit être compilée et testée dans deux instances réelles d'Oblivion avant d'être considérée comme validée.
 
-L'absence du journal ne prouve pas à elle seule la cause : le plugin peut être rejeté avant Load, ou l'écriture peut échouer. Le journal confirme uniquement que le point d'entrée Load a été atteint, pas une compatibilité complète du runtime.
+Le mode hôte n'accepte qu'un client. Les messages de gameplay, reconnexion, déconnexion propre côté jeu, synchronisation de cellules, combat, entités et sauvegardes ne sont pas encore implémentés.
 
-## SDK
+## Configuration
 
-Le workflow utilise le dépôt officiel `llde/xOBSE`, épinglé sur le commit :
-
-`5ad9b4a287a27801e6d01f22769e84d851509595`
-
-Il réutilise le projet officiel `obse_plugin_example` et ses dépendances, mais remplace son point d'entrée par une implémentation minimale. Le projet est compilé en Win32/Release avec MSVC v143 sur le runner Windows 2022. Le projet SDK d'origine déclare v142 ; le workflow adapte les fichiers de projet à v143 pour utiliser le toolset fourni par le runner.
-
-## Version ciblée
-
-`OBLIVION_VERSION=0x010201A0`, conformément à la configuration du projet exemple officiel pour Oblivion 1.2.0.416. Le plugin refuse les autres versions et l'éditeur.
-
-Cette valeur est une cible de compilation ; elle ne prouve pas à elle seule que l'exécutable français installé expose exactement le même runtime. Le test réel reste obligatoire.
-
-## Récupérer le build
-
-Dans GitHub :
-1. Ouvrir l'onglet **Actions**.
-2. Sélectionner **Build xOBSE plugin (Win32)**.
-3. Ouvrir la dernière exécution verte.
-4. Télécharger l'artifact **OblivionLAN-xOBSE-Win32**.
-5. Extraire `OblivionLAN.dll` et suivre `INSTALL.txt`.
-
-L'artifact est conservé 14 jours. Aucun binaire n'est commité dans le dépôt.
-
-## Critères de réussite
-
-- [x] Le workflow compile la solution xOBSE en Win32/Release.
-- [x] L'artifact contient une DLL x86.
-- [ ] xOBSE accepte le plugin dans Oblivion classique.
-- [ ] Le jeu démarre et le journal confirme le chargement sur l'installation de test.
+Voir `INSTALL.txt` et `OblivionLAN.ini.example`. Commencer par `Mode=disabled` si un test réseau n'est pas souhaité.
