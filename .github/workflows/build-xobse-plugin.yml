@@ -1,0 +1,63 @@
+name: Build xOBSE plugin (Win32)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/first-xobse-plugin
+    paths:
+      - "src/plugin/**"
+      - ".github/workflows/build-xobse-plugin.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+
+      - name: Checkout pinned xOBSE SDK
+        uses: actions/checkout@v4
+        with:
+          repository: llde/xOBSE
+          ref: 5ad9b4a287a27801e6d01f22769e84d851509595
+          path: _deps/xOBSE
+          submodules: recursive
+
+      - name: Prepare minimal plugin source
+        shell: pwsh
+        run: |
+          Copy-Item src/plugin/main.cpp _deps/xOBSE/obse_plugin_example/main.cpp -Force
+          Copy-Item src/plugin/dllmain.c _deps/xOBSE/obse_plugin_example/dllmain.c -Force
+          Copy-Item src/plugin/exports.def _deps/xOBSE/obse_plugin_example/exports.def -Force
+          Get-ChildItem _deps/xOBSE -Recurse -Filter *.vcxproj | ForEach-Object {
+            $raw = Get-Content $_.FullName -Raw
+            $raw = $raw.Replace('v142', 'v143')
+            Set-Content $_.FullName $raw -NoNewline
+          }
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build x86 Release DLL
+        shell: pwsh
+        run: |
+          msbuild _deps/xOBSE/obse_plugin_example/obse_plugin_example.sln /m /p:Configuration=Release /p:Platform=Win32 /p:PlatformToolset=v143 /verbosity:minimal
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $dll = Get-ChildItem _deps/xOBSE/obse_plugin_example -Recurse -Filter obse_plugin_example.dll | Select-Object -First 1
+          if (-not $dll) { throw "Build completed but obse_plugin_example.dll was not found." }
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+          Copy-Item $dll.FullName artifacts/OblivionLAN.dll
+          Copy-Item src/plugin/INSTALL.txt artifacts/INSTALL.txt
+          Get-FileHash artifacts/OblivionLAN.dll -Algorithm SHA256 | Format-List
+
+      - name: Upload plugin artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OblivionLAN-xOBSE-Win32
+          path: artifacts/*
+          if-no-files-found: error
+          retention-days: 14
