@@ -1,23 +1,51 @@
-OblivionLAN — premier plugin de test
-
+OblivionLAN — premier réseau LAN intégré au plugin xOBSE
 Cible : The Elder Scrolls IV: Oblivion classique, xOBSE, Win32.
-Ce plugin ne contient encore aucune fonction multijoueur.
 
-Installation de test :
+ÉTAT
+Cette version ajoute une connexion TCP optionnelle au chargement du plugin.
+Elle effectue le handshake réseau et maintient la connexion ouverte.
+Elle ne synchronise PAS encore les positions, les personnages, les combats ou les quêtes.
+
+INSTALLATION
 1. Fermer Oblivion.
 2. Faire une copie de sauvegarde du dossier Data\OBSE\Plugins s'il existe.
 3. Copier OblivionLAN.dll dans :
    <dossier Oblivion>\Data\OBSE\Plugins\
-4. Lancer le jeu avec obse_loader.exe.
-5. Vérifier que le jeu arrive au menu et qu'une sauvegarde de test se charge.
-6. Consulter obse.log / les journaux xOBSE si le chargement échoue.
+4. Copier OblivionLAN.ini.example dans le même dossier et le renommer OblivionLAN.ini.
+5. Configurer le fichier comme indiqué ci-dessous.
+6. Lancer Oblivion avec obse_loader.exe.
+7. Consulter OblivionLAN.log dans Data\OBSE\Plugins.
 
-Ne pas tester d'abord sur une sauvegarde importante.
-Retirer OblivionLAN.dll pour désactiver ce premier plugin.
+CONFIGURATION À DEUX PC
+Sur le PC hôte, dans OblivionLAN.ini :
+[Network]
+Mode=host
+Host=127.0.0.1
+Port=47621
 
-Validation attendue :
-- Le build GitHub Actions doit réussir en Win32 Release.
-- Le jeu doit démarrer avec le plugin présent.
-- Le journal xOBSE doit confirmer le chargement du plugin, sans erreur de version.
+Sur le PC client, dans OblivionLAN.ini :
+[Network]
+Mode=client
+Host=192.168.1.158
+Port=47621
 
-Un build réussi ne prouve pas encore le chargement en jeu.
+Remplacer 192.168.1.158 par l'adresse IPv4 réelle du PC hôte.
+Les deux PC doivent être sur le même réseau local. Autoriser Oblivion dans le pare-feu
+Windows sur le réseau privé si nécessaire. Ne pas exposer le port à Internet.
+Le mode hôte n'accepte qu'un seul client dans cette première étape.
+Le jeu hôte doit avoir chargé le plugin et son journal doit indiquer qu'il écoute
+avant que le client ne tente de se connecter.
+
+DÉPANNAGE
+- Mode=disabled désactive le réseau sans désactiver le plugin.
+- « bind/listen failed » : le port est peut-être déjà utilisé ou bloqué.
+- « could not connect » : vérifier l'adresse, que l'hôte écoute, et le pare-feu privé.
+- Les messages réseau sont consignés dans OblivionLAN.log.
+- Pour désactiver le réseau, remettre Mode=disabled puis relancer le jeu.
+- Pour désactiver complètement le plugin, fermer le jeu et retirer OblivionLAN.dll.
+
+SÉCURITÉ ET LIMITES
+Tester sur une installation et une sauvegarde de test.
+Ne pas utiliser une sauvegarde importante pour les premières validations.
+Un build réussi ne prouve pas le chargement ou la compatibilité en jeu.
+Cette étape ne crée aucun personnage visible dans le monde.
