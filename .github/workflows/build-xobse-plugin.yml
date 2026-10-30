@@ -52,6 +52,7 @@ jobs:
           New-Item -ItemType Directory -Force artifacts | Out-Null
           Copy-Item $dll.FullName artifacts/OblivionLAN.dll
           Copy-Item src/plugin/INSTALL.txt artifacts/INSTALL.txt
+          Copy-Item src/plugin/OblivionLAN.ini.example artifacts/OblivionLAN.ini.example
           Get-FileHash artifacts/OblivionLAN.dll -Algorithm SHA256 | Format-List
 
       - name: Upload plugin artifact
