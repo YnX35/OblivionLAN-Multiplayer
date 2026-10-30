@@ -1,0 +1,8 @@
+; Copy this file to OblivionLAN.ini in the same folder as OblivionLAN.dll.
+; Set Mode=host on the host PC, or Mode=client on the joining PC.
+; Keep the game and both PCs on the same trusted private LAN.
+
+[Network]
+Mode=disabled
+Host=192.168.1.158
+Port=47621
