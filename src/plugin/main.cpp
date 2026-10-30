@@ -1,4 +1,47 @@
 #include "obse/PluginAPI.h"
+#include <windows.h>
+#include <cstring>
+
+namespace
+{
+void WriteLoadLog()
+{
+    HMODULE module = nullptr;
+    if (!GetModuleHandleExA(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            reinterpret_cast<LPCSTR>(&WriteLoadLog),
+            &module))
+        return;
+
+    char path[MAX_PATH] = {};
+    const DWORD length = GetModuleFileNameA(module, path, MAX_PATH);
+    if (length == 0 || length >= MAX_PATH)
+        return;
+
+    char* separator = std::strrchr(path, '\\');
+    if (separator == nullptr)
+        return;
+
+    *(separator + 1) = '\0';
+    const char* filename = "OblivionLAN.log";
+    if (std::strlen(path) + std::strlen(filename) >= MAX_PATH)
+        return;
+    std::strcat(path, filename);
+
+    HANDLE file = CreateFileA(
+        path, FILE_APPEND_DATA, FILE_SHARE_READ, nullptr, OPEN_ALWAYS,
+        FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE)
+        return;
+
+    static const char message[] =
+        "OblivionLAN: OBSEPlugin_Load reached successfully.\\r\\n";
+    DWORD written = 0;
+    WriteFile(file, message, static_cast<DWORD>(sizeof(message) - 1), &written, nullptr);
+    CloseHandle(file);
+}
+}
 
 extern "C"
 {
@@ -27,9 +70,12 @@ bool OBSEPlugin_Query(const OBSEInterface* obse, PluginInfo* info)
 
 bool OBSEPlugin_Load(const OBSEInterface* obse)
 {
-    // Stage 1: prove that xOBSE can load the DLL.
-    // No commands, hooks, networking, save access, or game-memory writes yet.
-    return obse != nullptr && !obse->isEditor;
+    if (obse == nullptr || obse->isEditor)
+        return false;
+
+    // Diagnostic only: no commands, hooks, networking, save access, or game-memory writes.
+    WriteLoadLog();
+    return true;
 }
 
 }
