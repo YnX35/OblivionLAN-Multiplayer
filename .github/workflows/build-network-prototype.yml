@@ -1,0 +1,40 @@
+name: Build LAN network prototype
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/first-xobse-plugin
+    paths:
+      - "src/network/**"
+      - ".github/workflows/build-network-prototype.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S src/network -B build/network -A Win32
+
+      - name: Build
+        run: cmake --build build/network --config Release
+
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+          Copy-Item build/network/Release/OblivionLANProbe.exe artifacts/OblivionLANProbe.exe
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: OblivionLAN-LAN-Probe-Windows-x86
+          path: artifacts/OblivionLANProbe.exe
+          if-no-files-found: error
+          retention-days: 14
