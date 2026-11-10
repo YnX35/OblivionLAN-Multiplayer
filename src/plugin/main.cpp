@@ -29,6 +29,10 @@ constexpr LONG kMaxRemotePlayers = 3; // Up to four players including the host.
 volatile LONG g_connectedClients = 0;
 volatile LONG g_nextPlayerId = 1;
 volatile LONG g_localNetworkPlayerId = 0;
+CRITICAL_SECTION g_peerLock{};
+bool g_peerLockReady = false;
+std::array<SOCKET, 3> g_hostPeers{{INVALID_SOCKET, INVALID_SOCKET, INVALID_SOCKET}};
+std::array<std::uint16_t, 3> g_hostPeerIds{{0, 0, 0}};
 CRITICAL_SECTION g_snapshotLock{};
 bool g_snapshotLockReady = false;
 struct PlayerSnapshot
@@ -216,6 +220,23 @@ bool send_frame(SOCKET socket, std::uint16_t type,
     return send_all(socket, frame.data(), frame.size());
 }
 
+bool recv_frame_any(SOCKET socket, std::uint16_t& type,
+                    std::vector<std::uint8_t>& payload)
+{
+    std::array<std::uint8_t, 12> header{};
+    if (!recv_all(socket, header.data(), header.size()))
+        return false;
+    if (std::memcmp(header.data(), kMagic, 4) != 0 ||
+        read_u16(header.data() + 4) != kProtocolVersion)
+        return false;
+    type = read_u16(header.data() + 6);
+    const std::uint32_t length = read_u32(header.data() + 8);
+    if (length > kMaxPayload)
+        return false;
+    payload.resize(length);
+    return length == 0 || recv_all(socket, payload.data(), payload.size());
+}
+
 bool recv_frame(SOCKET socket, std::uint16_t expectedType,
                 std::vector<std::uint8_t>& payload)
 {
@@ -268,6 +289,61 @@ bool acceptHello(SOCKET socket, std::uint16_t& assignedPlayerId)
     return send_frame(socket, kWelcome, welcome);
 }
 
+bool RegisterHostPeer(SOCKET peer, std::uint16_t playerId)
+{
+    if (!g_peerLockReady)
+        return false;
+    bool registered = false;
+    EnterCriticalSection(&g_peerLock);
+    for (std::size_t i = 0; i < g_hostPeers.size(); ++i)
+    {
+        if (g_hostPeers[i] == INVALID_SOCKET)
+        {
+            g_hostPeers[i] = peer;
+            g_hostPeerIds[i] = playerId;
+            registered = true;
+            break;
+        }
+    }
+    LeaveCriticalSection(&g_peerLock);
+    return registered;
+}
+
+void UnregisterHostPeer(SOCKET peer)
+{
+    if (!g_peerLockReady)
+        return;
+    EnterCriticalSection(&g_peerLock);
+    for (std::size_t i = 0; i < g_hostPeers.size(); ++i)
+    {
+        if (g_hostPeers[i] == peer)
+        {
+            g_hostPeers[i] = INVALID_SOCKET;
+            g_hostPeerIds[i] = 0;
+            break;
+        }
+    }
+    LeaveCriticalSection(&g_peerLock);
+}
+
+void RelaySnapshotToOtherPeers(SOCKET source, const std::vector<std::uint8_t>& payload)
+{
+    if (!g_peerLockReady)
+        return;
+    // A single lock prevents concurrent workers from interleaving TCP frames
+    // on a destination socket and keeps sockets alive during each send.
+    EnterCriticalSection(&g_peerLock);
+    for (std::size_t i = 0; i < g_hostPeers.size(); ++i)
+    {
+        const SOCKET destination = g_hostPeers[i];
+        if (destination == INVALID_SOCKET || destination == source)
+            continue;
+        if (!send_frame(destination, kPlayerSnapshot, payload))
+            Log("Warning: failed to relay a player snapshot to a peer.");
+    }
+    LeaveCriticalSection(&g_peerLock);
+}
+
 struct PeerContext
 {
     SOCKET socket;
@@ -314,6 +390,7 @@ DWORD WINAPI PeerWorker(void* parameter)
             break;
         }
         lastAcceptedSequence = sequence;
+        RelaySnapshotToOtherPeers(peer, payload);
         const DWORD now = GetTickCount();
         if (now - lastSnapshotLogAt >= 5000)
         {
@@ -327,6 +404,7 @@ DWORD WINAPI PeerWorker(void* parameter)
         }
     }
 
+    UnregisterHostPeer(peer);
     shutdown(peer, SD_BOTH);
     closesocket(peer);
     InterlockedDecrement(&g_connectedClients);
@@ -340,6 +418,8 @@ void KeepConnectionUntilClosed(SOCKET peer)
     // stale positions are coalesced instead of building an unbounded backlog.
     DWORD lastSentAt = 0;
     std::uint32_t lastSentSequence = 0;
+    std::array<std::uint32_t, 4> lastRemoteSequence{{0, 0, 0, 0}};
+    DWORD lastRemoteLogAt = 0;
     for (;;)
     {
         const DWORD now = GetTickCount();
@@ -383,10 +463,48 @@ void KeepConnectionUntilClosed(SOCKET peer)
             break;
         if (ready > 0)
         {
-            char probe = 0;
-            const int received = recv(peer, &probe, 1, MSG_PEEK);
-            if (received <= 0)
+            std::uint16_t incomingType = 0;
+            std::vector<std::uint8_t> incoming;
+            if (!recv_frame_any(peer, incomingType, incoming))
                 break;
+            if (incomingType != kPlayerSnapshot || incoming.size() != 22)
+            {
+                Log("Network warning: host sent an unsupported or malformed frame.");
+                break;
+            }
+
+            const std::uint16_t remoteId = read_u16(incoming.data());
+            const std::uint32_t remoteSequence = read_u32(incoming.data() + 2);
+            std::uint32_t xb = read_u32(incoming.data() + 10);
+            std::uint32_t yb = read_u32(incoming.data() + 14);
+            std::uint32_t zb = read_u32(incoming.data() + 18);
+            float x = 0.0f, y = 0.0f, z = 0.0f;
+            std::memcpy(&x, &xb, sizeof(x));
+            std::memcpy(&y, &yb, sizeof(y));
+            std::memcpy(&z, &zb, sizeof(z));
+            if (remoteId == 0 || remoteId == static_cast<std::uint16_t>(
+                    InterlockedCompareExchange(&g_localNetworkPlayerId, 0, 0)) ||
+                remoteId >= lastRemoteSequence.size() || remoteSequence == 0 ||
+                remoteSequence <= lastRemoteSequence[remoteId] ||
+                !std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z) ||
+                std::fabs(x) > 10000000.0f || std::fabs(y) > 10000000.0f ||
+                std::fabs(z) > 10000000.0f)
+            {
+                Log("Network warning: rejected invalid relayed player snapshot.");
+                continue;
+            }
+            lastRemoteSequence[remoteId] = remoteSequence;
+            const DWORD receivedAt = GetTickCount();
+            if (receivedAt - lastRemoteLogAt >= 5000)
+            {
+                lastRemoteLogAt = receivedAt;
+                char message[160] = {};
+                std::snprintf(message, sizeof(message),
+                    "Receiving relayed remote player: player=%u seq=%lu cell=%08lX pos=(%.1f, %.1f, %.1f).",
+                    static_cast<unsigned>(remoteId), static_cast<unsigned long>(remoteSequence),
+                    static_cast<unsigned long>(read_u32(incoming.data() + 6)), x, y, z);
+                Log(message);
+            }
         }
     }
     shutdown(peer, SD_BOTH);
@@ -498,10 +616,19 @@ DWORD WINAPI NetworkWorker(void*)
             setsockopt(peer, SOL_SOCKET, SO_SNDTIMEO,
                 reinterpret_cast<const char*>(&handshakeTimeoutMs), sizeof(handshakeTimeoutMs));
 
+            if (!RegisterHostPeer(peer, assignedPlayerId))
+            {
+                Log("Network error: host peer registry is full.");
+                shutdown(peer, SD_BOTH);
+                closesocket(peer);
+                continue;
+            }
+
             PeerContext* context = new (std::nothrow) PeerContext{peer, assignedPlayerId};
             if (context == nullptr)
             {
                 Log("Network error: not enough memory for peer context.");
+                UnregisterHostPeer(peer);
                 shutdown(peer, SD_BOTH);
                 closesocket(peer);
                 continue;
@@ -512,6 +639,7 @@ DWORD WINAPI NetworkWorker(void*)
             if (peerThread == nullptr)
             {
                 InterlockedDecrement(&g_connectedClients);
+                UnregisterHostPeer(peer);
                 delete context;
                 shutdown(peer, SD_BOTH);
                 closesocket(peer);
@@ -633,6 +761,8 @@ bool OBSEPlugin_Load(const OBSEInterface* obse)
     WriteLoadLog();
     InitializeCriticalSection(&g_snapshotLock);
     g_snapshotLockReady = true;
+    InitializeCriticalSection(&g_peerLock);
+    g_peerLockReady = true;
 
     // Use the SDK's supported main-loop task interface. Game state must only
     // be sampled/applied here, never from the socket worker threads.
