@@ -231,6 +231,22 @@ DWORD WINAPI PeerWorker(void* parameter)
     return 0;
 }
 
+void KeepConnectionUntilClosed(SOCKET peer)
+{
+    // Client-side connection lifecycle: this runs on the network worker thread,
+    // never on Oblivion's main/game thread.
+    char ignored = 0;
+    for (;;)
+    {
+        const int result = recv(peer, &ignored, 1, 0);
+        if (result <= 0)
+            break;
+    }
+    shutdown(peer, SD_BOTH);
+    closesocket(peer);
+    Log("Host connection closed.");
+}
+
 DWORD WINAPI NetworkWorker(void*)
 {
     char mode[16] = {};
