@@ -1,5 +1,5 @@
 OblivionLAN — premier réseau LAN intégré au plugin xOBSE
-Cible : The Elder Scrolls IV: Oblivion classique, xOBSE, Win32.
+Cible : The Elder Scrolls IV: Oblivion classique, Steam, xOBSE, Win32.
 
 ÉTAT
 Cette version ajoute une connexion TCP optionnelle au chargement du plugin.
@@ -13,7 +13,11 @@ INSTALLATION
    <dossier Oblivion>\Data\OBSE\Plugins\
 4. Copier OblivionLAN.ini.example dans le même dossier et le renommer OblivionLAN.ini.
 5. Configurer le fichier comme indiqué ci-dessous.
-6. Lancer Oblivion avec obse_loader.exe.
+6. Pour la version STEAM : vérifier que xOBSE est installé dans le dossier racine du jeu
+   (notamment obse_steam_loader.dll), puis lancer Oblivion depuis Steam
+   ou en ouvrant Oblivion.exe. Ne pas utiliser obse_loader.exe pour lancer
+   normalement la version Steam : ce loader est destiné au lancement de l'éditeur.
+   Pour une version retail non-Steam, utiliser obse_loader.exe.
 7. Consulter OblivionLAN.log dans Data\OBSE\Plugins.
 
 CONFIGURATION À DEUX PC
@@ -26,10 +30,10 @@ Port=47621
 Sur le PC client, dans OblivionLAN.ini :
 [Network]
 Mode=client
-Host=192.168.1.158
+Host=<IPv4 du PC hôte>
 Port=47621
 
-Remplacer 192.168.1.158 par l'adresse IPv4 réelle du PC hôte.
+Remplacer <IPv4 du PC hôte> par l'adresse IPv4 réelle du PC hôte.
 Les deux PC doivent être sur le même réseau local. Autoriser Oblivion dans le pare-feu
 Windows sur le réseau privé si nécessaire. Ne pas exposer le port à Internet.
 Le mode hôte n'accepte qu'un seul client dans cette première étape.
@@ -40,6 +44,9 @@ DÉPANNAGE
 - Mode=disabled désactive le réseau sans désactiver le plugin.
 - « bind/listen failed » : le port est peut-être déjà utilisé ou bloqué.
 - « could not connect » : vérifier l'adresse, que l'hôte écoute, et le pare-feu privé.
+- Si xOBSE ne se charge pas sur Steam, vérifier la présence de obse_steam_loader.dll
+  dans le dossier racine et activer l'overlay Steam. Si nécessaire, fermer Steam,
+  le relancer en tant qu'administrateur, puis démarrer le jeu depuis Steam.
 - Les messages réseau sont consignés dans OblivionLAN.log.
 - Pour désactiver le réseau, remettre Mode=disabled puis relancer le jeu.
 - Pour désactiver complètement le plugin, fermer le jeu et retirer OblivionLAN.dll.
