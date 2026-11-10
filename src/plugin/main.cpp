@@ -280,10 +280,8 @@ bool acceptHello(SOCKET socket, std::uint16_t& assignedPlayerId)
     const DWORD seed = GetTickCount() ^ GetCurrentProcessId();
     for (std::size_t i = 0; i < session.size(); ++i)
         session[i] = static_cast<std::uint8_t>((seed >> ((i % 4) * 8)) ^ (i * 37));
-    assignedPlayerId = static_cast<std::uint16_t>(
-        InterlockedIncrement(&g_nextPlayerId));
-    if (assignedPlayerId == 0)
-        return false;
+    const LONG nextId = InterlockedIncrement(&g_nextPlayerId);
+    assignedPlayerId = static_cast<std::uint16_t>(2 + ((nextId - 2) % 3));
     std::vector<std::uint8_t> welcome(session.begin(), session.end());
     put_u16(welcome, assignedPlayerId);
     return send_frame(socket, kWelcome, welcome);
