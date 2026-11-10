@@ -19,7 +19,7 @@ Une étape ne passe à « validée » qu'avec une preuve reproductible. « Impl�
 - [x] Définir la spécification OLAN v2 (paquets joueur, séquences, limites, autorité hôte) ; spécification seulement, pas encore codée.
 - [ ] Identifier et tester une méthode sûre pour lire l'état du joueur.
 - [x] Implémenter le relais des snapshots clients depuis l'hôte vers les autres clients (compilation Win32 à confirmer).
-- [ ] Synchroniser la présence puis la position de deux joueurs dans une zone de test.
+- [ ] Synchroniser la présence puis la position de deux joueurs dans une zone de test (transport et transfert vers la boucle principale codés ; rendu d'avatar absent).
 - [ ] Créer un avatar distant sans corrompre les sauvegardes ni les références.
 - [ ] Tester déconnexion, fermeture du jeu, timeout et messages invalides.
 - [ ] Synchroniser une interaction de monde réversible.
@@ -45,7 +45,7 @@ Le projet externe [ObMultiplayerServer](https://github.com/theturrell/ObMultipla
 
 ## Étape suivante — relais et présence des joueurs
 
-Le client capture un instantané sur la boucle principale et envoie le dernier état environ toutes les 100 ms. L'hôte vérifie l'identifiant attribué, le numéro de séquence et les coordonnées ; les paquets invalides ferment la connexion. L'hôte relaie désormais les positions reçues aux autres clients et ceux-ci les valident côté réseau. Elles ne sont pas encore appliquées au moteur et aucun avatar distant n'est affiché. La prochaine étape est une file entrante bornée puis une méthode sûre de création d'avatar. Aucune fonction du moteur n'est appelée depuis un thread Winsock.
+Le client capture un instantané sur la boucle principale et envoie le dernier état environ toutes les 100 ms. L'hôte vérifie l'identifiant attribué, le numéro de séquence et les coordonnées ; les paquets invalides ferment la connexion. L'hôte relaie désormais les positions reçues aux autres clients. Les snapshots sont validés puis transmis à la boucle principale via trois emplacements bornés et coalescés. Ils ne sont pas encore appliqués au moteur et aucun avatar distant n'est affiché. La prochaine étape est une file entrante bornée puis une méthode sûre de création d'avatar. Aucune fonction du moteur n'est appelée depuis un thread Winsock.
 
 Les positions ne suffisent pas à créer un avatar distant : il faudra ensuite identifier une méthode documentée et sûre pour représenter un autre joueur sans corrompre les sauvegardes ni les références du monde.
 
