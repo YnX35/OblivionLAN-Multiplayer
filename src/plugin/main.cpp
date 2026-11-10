@@ -27,7 +27,6 @@ constexpr std::uint32_t kMaxPayload = 256;
 constexpr unsigned short kDefaultPort = 47621;
 constexpr LONG kMaxRemotePlayers = 3; // Up to four players including the host.
 volatile LONG g_connectedClients = 0;
-volatile LONG g_nextPlayerId = 1;
 volatile LONG g_localNetworkPlayerId = 0;
 CRITICAL_SECTION g_peerLock{};
 bool g_peerLockReady = false;
@@ -264,6 +263,28 @@ bool sendHello(SOCKET socket)
     return send_frame(socket, kHello, payload);
 }
 
+std::uint16_t FindAvailablePlayerId()
+{
+    if (!g_peerLockReady)
+        return 0;
+    std::uint16_t result = 0;
+    EnterCriticalSection(&g_peerLock);
+    for (std::uint16_t candidate = 2; candidate <= 4; ++candidate)
+    {
+        bool inUse = false;
+        for (std::size_t i = 0; i < g_hostPeerIds.size(); ++i)
+            if (g_hostPeerIds[i] == candidate)
+                inUse = true;
+        if (!inUse)
+        {
+            result = candidate;
+            break;
+        }
+    }
+    LeaveCriticalSection(&g_peerLock);
+    return result;
+}
+
 bool acceptHello(SOCKET socket, std::uint16_t& assignedPlayerId)
 {
     std::vector<std::uint8_t> payload;
@@ -280,8 +301,9 @@ bool acceptHello(SOCKET socket, std::uint16_t& assignedPlayerId)
     const DWORD seed = GetTickCount() ^ GetCurrentProcessId();
     for (std::size_t i = 0; i < session.size(); ++i)
         session[i] = static_cast<std::uint8_t>((seed >> ((i % 4) * 8)) ^ (i * 37));
-    const LONG nextId = InterlockedIncrement(&g_nextPlayerId);
-    assignedPlayerId = static_cast<std::uint16_t>(2 + ((nextId - 2) % 3));
+    assignedPlayerId = FindAvailablePlayerId();
+    if (assignedPlayerId == 0)
+        return false;
     std::vector<std::uint8_t> welcome(session.begin(), session.end());
     put_u16(welcome, assignedPlayerId);
     return send_frame(socket, kWelcome, welcome);
