@@ -1,26 +1,23 @@
 # OblivionLAN-Multiplayer
 
-Projet expérimental visant à créer un mode multijoueur LAN pour The Elder Scrolls IV: Oblivion original (2006), pas Oblivion Remastered.
+Projet expérimental visant à créer un mode multijoueur LAN pour The Elder Scrolls IV: Oblivion classique (2006), pas Oblivion Remastered.
 
 ## État réel
 
-- Le plugin xOBSE Win32 minimal a été compilé via GitHub Actions et son point d'entrée `OBSEPlugin_Load` a été confirmé sur l'installation de test de l'utilisateur.
+- Plugin xOBSE Win32 compilé via GitHub Actions.
+- OBSEPlugin_Load a déjà été atteint sur une installation de test.
 - Le prototype réseau autonome a réussi un handshake entre deux PC sur le LAN.
-- Une première connexion TCP optionnelle a maintenant été ajoutée au plugin xOBSE : mode hôte ou client via `OblivionLAN.ini`.
-- **La nouvelle version intégrée doit encore être compilée et testée en jeu sur les deux PC.**
-- Aucun personnage visible, mouvement, combat, créature ou quête n'est encore synchronisé.
+- Le plugin intégré démarre un hôte TCP ou un client et effectue un handshake OLAN version 1.
+- L'hôte peut accepter jusqu'à trois clients distants (quatre joueurs au total), avec un thread indépendant par connexion.
+- La compilation du dernier changement doit être vérifiée par GitHub Actions, puis le build doit être testé dans deux instances réelles d'Oblivion.
 
-## Prochaine validation
+## Limite majeure — transparence
 
-1. Compiler le plugin avec la nouvelle couche réseau.
-2. Installer le même build sur les deux PC.
-3. Configurer un PC en `Mode=host` et l'autre en `Mode=client`.
-4. Vérifier `OblivionLAN.log` sur les deux PC et confirmer que le handshake fonctionne depuis les deux jeux.
-5. Ensuite, rechercher une voie sûre pour obtenir les mises à jour du joueur sur le thread du jeu et transmettre une première donnée de présence.
+Ce dépôt ne contient pas encore un véritable multijoueur jouable. La connexion réseau confirme seulement que les jeux peuvent établir une session TCP. Aucun avatar distant, mouvement, combat, créature, objet, inventaire ou quête n'est synchronisé. Le fait que deux jeux affichent « handshake successful » ne signifie pas qu'ils partagent le monde.
 
 ## Objectif final
 
-Permettre à 2 à 4 joueurs sur le même réseau local de rejoindre une partie hébergée par un joueur, avec un monde partagé et persistant. Cet objectif n'est pas encore atteint.
+Permettre à 2 à 4 joueurs sur le même réseau local de rejoindre une partie hébergée par un joueur, avec un monde partagé et persistant.
 
 Principes visés :
 - l'hôte valide les changements d'état partagés ;
@@ -43,6 +40,6 @@ Principes visés :
 - Architecture : docs/ARCHITECTURE.md
 - Feuille de route : docs/ROADMAP.md
 - Sécurité : SECURITY.md
-- Instructions plugin : src/plugin/INSTALL.txt
+- Instructions : src/plugin/INSTALL.txt
 
 Projet indépendant, non affilié à Bethesda.
