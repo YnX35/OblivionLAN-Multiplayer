@@ -16,14 +16,15 @@ Une étape ne passe à « validée » qu'avec une preuve reproductible. « Impl�
 - [x] Ajouter un point d'exécution récurrent sur la boucle principale via l'interface xOBSE Tasks2 (capture du joueur en lecture seule, diagnostic).
 - [ ] Tester le handshake depuis deux instances réelles d'Oblivion.
 - [x] Ajouter un instantané joueur partagé de manière thread-safe entre la boucle de jeu et le worker client (dernier état coalescé, pas de file non bornée).
-- [x] Conserver le dernier instantané de chaque joueur distant pour les arrivées tardives et éviter de retraiter une même séquence ; réinitialiser l'état à la déconnexion (compilation de la correction en attente).
+- [x] conserver le dernier instantané de chaque joueur distant pour les arrivées tardives et éviter de retraiter une même séquence ; réinitialiser l'état à la déconnexion (compilation Win32 Release réussie).
 - [x] Définir la spécification OLAN v2 (paquets joueur, séquences, limites, autorité hôte) ; spécification seulement, pas encore codée.
 - [ ] Identifier et tester une méthode sûre pour lire l'état du joueur.
 - [x] Implémenter le relais des snapshots clients depuis l'hôte vers les autres clients.
 - [x] Diffuser la position de l'hôte vers les clients (compilation GitHub Actions Win32 Release réussie).
 - [x] Notifier la déconnexion d'un client et nettoyer son instantané distant (compilation GitHub Actions Win32 Release réussie).
 - [ ] Synchroniser la présence puis la position de deux joueurs dans une zone de test (transport et transfert vers la boucle principale codés ; rendu d'avatar absent).
-- [ ] Créer un avatar distant sans corrompre les sauvegardes ni les références.
+- [ ] Compiler et inspecter le premier prototype d'avatar distant same-cell basé sur `PlaceAtMe` et l'interface console xOBSE (compilation en cours ; sauvegardes non encore testées).
+- [ ] Valider le cycle de vie des avatars (réutilisation, désactivation, changement de cellule, fermeture et sauvegarde) sans accumulation de références.
 - [ ] Tester déconnexion, fermeture du jeu, timeout et messages invalides.
 - [ ] Synchroniser une interaction de monde réversible.
 - [ ] Persistance contrôlée côté hôte.
@@ -49,6 +50,8 @@ Le projet externe [ObMultiplayerServer](https://github.com/theturrell/ObMultipla
 ## Étape suivante — relais et présence des joueurs
 
 Le client capture un instantané sur la boucle principale et envoie le dernier état environ toutes les 100 ms. L'hôte vérifie l'identifiant attribué, le numéro de séquence et les coordonnées ; les paquets invalides ferment la connexion. L'hôte relaie les positions des clients, diffuse sa propre position, transmet les événements de déconnexion et envoie immédiatement sa dernière position connue à un client qui vient de rejoindre lorsque cet instantané est déjà disponible. Les snapshots sont validés puis transmis à la boucle principale via quatre emplacements bornés et coalescés. Ces changements passent la compilation Win32 Release, mais ils ne sont pas encore testés dans deux instances réelles. Ils ne sont pas encore appliqués au moteur et aucun avatar distant n'est affiché. La prochaine étape est une méthode sûre de création et de mise à jour d'avatar. Aucune fonction du moteur n'est appelée depuis un thread Winsock.
+
+Un premier prototype de proxy d'avatar vient d'être ajouté : il tente de créer une seule copie du personnage local dans la même cellule, la découvre en comparant les références de la cellule avant/après `PlaceAtMe`, puis la déplace via des commandes xOBSE sur la boucle principale. Il est volontairement limité à la même cellule et ne doit pas encore être considéré comme validé : la compilation de ce commit est en cours, l'affichage en jeu et le comportement des sauvegardes n'ont pas été testés.
 
 Les positions ne suffisent pas à créer un avatar distant : il faudra ensuite identifier une méthode documentée et sûre pour représenter un autre joueur sans corrompre les sauvegardes ni les références du monde. La commande script `PlaceAtMe` est documentée côté moteur, mais son invocation sûre depuis le plugin C++ n'est pas établie. Elle crée des références qui ne sont pas automatiquement supprimées ; une création répétée sans stratégie de réutilisation/nettoyage peut faire grossir les sauvegardes. Ne pas appeler une adresse moteur supposée ni créer des références brutes tant que le cycle de vie complet (création, enregistrement dans la cellule, 3D, suppression) n'est pas vérifié.
 
