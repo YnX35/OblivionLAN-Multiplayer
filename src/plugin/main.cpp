@@ -48,6 +48,7 @@ struct PlayerSnapshot
 };
 std::array<PlayerSnapshot, 4> g_remoteSnapshots{};
 std::array<bool, 4> g_hasRemoteSnapshot{{false, false, false, false}};
+std::array<std::uint32_t, 4> g_lastConsumedRemoteSequence{{0, 0, 0, 0}};
 PlayerSnapshot g_latestSnapshot{};
 bool g_hasSnapshot = false;
 DWORD g_lastSnapshotSequence = 0;
@@ -130,12 +131,13 @@ bool GameThreadPump()
         EnterCriticalSection(&g_remoteSnapshotLock);
         pending = g_remoteSnapshots;
         present = g_hasRemoteSnapshot;
-        g_hasRemoteSnapshot = {{false, false, false, false}};
         LeaveCriticalSection(&g_remoteSnapshotLock);
         for (std::size_t i = 0; i < pending.size(); ++i)
         {
-            if (!present[i])
+            if (!present[i] ||
+                pending[i].sequence == g_lastConsumedRemoteSequence[i])
                 continue;
+            g_lastConsumedRemoteSequence[i] = pending[i].sequence;
             char message[160] = {};
             std::snprintf(message, sizeof(message),
                 "Game-thread received remote snapshot: player=%u seq=%lu cell=%08lX pos=(%.1f, %.1f, %.1f).",
