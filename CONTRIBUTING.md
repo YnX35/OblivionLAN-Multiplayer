@@ -1,53 +1,77 @@
-# Contribuer au projet
+# Contributing to OblivionLAN
 
-La priorité est la reproductibilité et la protection des sauvegardes.
+Thank you for your interest in contributing. The project is at an early design stage, so clear proposals, careful technical investigation and reproducible tests are especially valuable.
 
-## Avant de coder
+## Before you start
 
-1. Lire README.md, AI_CONTEXT.md et les documents d'architecture.
-2. Vérifier la version du jeu, de xOBSE et du SDK ciblés.
-3. Décrire le problème ou la fonctionnalité dans une issue.
-4. Vérifier toute API xOBSE dans le SDK exact.
+1. Read the [project overview](README.md), [architecture](docs/ARCHITECTURE.md), [development guide](docs/DEVELOPMENT.md) and [roadmap](docs/ROADMAP.md).
+2. Check existing issues and pull requests to avoid duplicate work.
+3. For substantial changes, open an issue first and describe the problem, proposed approach and compatibility impact.
+4. Verify game-engine and xOBSE APIs against the exact SDK and runtime version being targeted. Do not rely on undocumented assumptions.
 
-## Branches et pull requests
+## Areas for contribution
 
-- Ne pas développer directement sur main.
-- Créer une branche descriptive, par exemple feature/protocol-framing ou fix/packet-length-check.
-- Une pull request explique le but, les fichiers modifiés, les tests exécutés et les limites connues.
-- Une seule fonctionnalité cohérente par pull request.
-- Ne pas fusionner une modification qui casse les tests ou change le protocole sans mise à jour de version.
+The project may need help with:
 
-## Qualité et validation
+- xOBSE plugin development and reverse-engineering research;
+- network protocol design and implementation;
+- session management and host-authoritative state;
+- safe game-thread integration;
+- persistence, recovery and save compatibility;
+- automated tests, test tooling and technical documentation.
 
-Préciser les validations réellement effectuées :
-- revue statique ;
-- compilation (configuration, architecture et version de l'outil) ;
-- tests unitaires ;
-- test LAN sur deux instances ;
-- test en jeu ;
-- test de sauvegarde/rechargement.
+The roadmap defines the current order of work. Please coordinate before beginning work on an area that is already in progress.
 
-Ne pas déclarer une validation qui n'a pas été exécutée. Si un test est impossible, l'indiquer.
+## Branches and pull requests
 
-## Style
+- Keep `main` stable.
+- Create a focused branch for each change, using a descriptive name such as `feature/protocol-framing` or `fix/packet-validation`.
+- Keep each pull request limited to one coherent change.
+- Explain the motivation, design, compatibility impact and known limitations.
+- Link related issues.
+- Update documentation and tests when behaviour or design changes.
+- Do not merge unreviewed changes that affect save data, protocol compatibility or game-engine hooks.
 
-- Utiliser des noms explicites et cohérents.
-- Documenter les invariants et les choix non évidents.
-- Garder les fonctions courtes et gérer explicitement les erreurs.
-- Justifier toute nouvelle dépendance.
-- Ne pas stocker de secrets dans le code ou les issues.
+## Code quality
 
-## Fichiers interdits
+- Use clear, consistent names and document non-obvious invariants.
+- Validate all external input, including network messages and persisted data.
+- Bound allocations, queues and message sizes.
+- Handle errors and disconnects explicitly.
+- Avoid undefined behaviour, unchecked casts and assumptions about object lifetime.
+- Keep networking code independent from direct game-engine calls.
+- Justify new dependencies and record the exact version used.
+- Do not add an API call unless it is supported by the selected SDK/runtime.
 
-Ne pas ajouter d'exécutables, DLL compilées, fichiers du jeu ou ressources Bethesda, sauvegardes personnelles, mots de passe, tokens, clés privées ou dumps mémoire contenant des données personnelles.
+## Testing and reporting
 
-## Checklist de pull request
+For every change, state exactly which checks were performed. Relevant checks may include:
 
-- [ ] Le changement répond à un objectif précis.
-- [ ] Les hypothèses sont documentées.
-- [ ] Les entrées externes sont validées.
-- [ ] Les erreurs et déconnexions sont gérées.
-- [ ] Les tests pertinents ont été exécutés.
-- [ ] Les résultats réels et limites sont indiqués.
-- [ ] La documentation est à jour.
-- [ ] Aucun secret, binaire ou fichier du jeu n'est inclus.
+- static review;
+- compilation, including compiler version and target architecture;
+- unit or protocol tests;
+- two-process or two-machine LAN tests;
+- in-game tests using a documented game and xOBSE configuration;
+- save, reload, recovery and disconnect tests.
+
+Never describe a test as passed unless it was actually executed. If a test could not be run, say so and explain why.
+
+## Files that must not be committed
+
+Do not commit:
+
+- game installation files or Bethesda-owned assets;
+- personal save files or memory dumps;
+- compiled binaries unless a release process explicitly requires them;
+- credentials, access tokens, private keys or local configuration containing secrets;
+- personal data or logs that expose private information.
+
+## Pull request checklist
+
+- [ ] The change has a clear, limited purpose.
+- [ ] Relevant design and compatibility assumptions are documented.
+- [ ] External inputs are validated and bounded.
+- [ ] Errors, timeouts and disconnects are handled where relevant.
+- [ ] Tests were run and their results are accurately reported.
+- [ ] Documentation and roadmap status are up to date.
+- [ ] No game assets, personal data, secrets or unintended binaries are included.
