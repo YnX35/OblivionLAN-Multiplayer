@@ -4,7 +4,7 @@
 
 Ce document définit la prochaine évolution du protocole du projet pour **Oblivion classique 32 bits (2006)**. Il ne décrit pas OB:MP de ReadyM comme une dépendance : le projet ReadyM cible Oblivion Remastered et son environnement technique est différent.
 
-La version actuellement intégrée au plugin utilise encore l'en-tête **OLAN v1**. Elle effectue le handshake TCP et transporte les `PLAYER_SNAPSHOT` dans les deux sens : les clients envoient leurs positions à l'hôte, qui les relaie ; l'hôte diffuse aussi sa propre position aux clients. Le code ajoute désormais l'envoi initial des instantanés connus à un nouvel arrivant ; cette dernière modification a été compilée avec succès en Win32 Release. Les instantanés distants sont validés puis déposés dans des emplacements bornés consultés par la boucle principale xOBSE ; le dernier état reste conservé pour initialiser les nouveaux clients, tandis que la boucle évite de retraiter le même numéro de séquence. Aucun changement n'est encore appliqué au moteur et aucun avatar distant n'est créé. La spécification v2 ci-dessous reste une cible future.
+La version actuellement intégrée au plugin utilise encore l'en-tête **OLAN v1**. Elle effectue le handshake TCP et transporte les `PLAYER_SNAPSHOT` dans les deux sens : les clients envoient leurs positions à l'hôte, qui les relaie ; l'hôte diffuse aussi sa propre position aux clients. Le code ajoute désormais l'envoi initial des instantanés connus à un nouvel arrivant ; cette dernière modification a été compilée avec succès en Win32 Release. Les instantanés distants sont validés puis déposés dans des emplacements bornés consultés par la boucle principale xOBSE ; le dernier état reste conservé pour initialiser les nouveaux clients, tandis que la boucle évite de retraiter le même numéro de séquence. Un premier prototype d'avatar distant same-cell est désormais présent dans le plugin : il tente de créer un proxy via `PlaceAtMe`, de retrouver sa référence et de la déplacer depuis la boucle principale. Le build Win32 Release du commit `e11322d` réussit, mais le rendu en jeu et le cycle de vie en sauvegarde ne sont pas encore testés. La spécification v2 ci-dessous reste une cible future.
 
 ## Transport
 
@@ -107,5 +107,5 @@ Le flag Persistent ne suffit pas à lui seul à rendre un objet synchronisable. 
 - Diffusion de la position de l'hôte (ID 1) vers les clients : ajoutée et compilée avec succès. L'envoi initial au nouvel arrivant (position de l'hôte et derniers instantanés des clients déjà présents) est ajouté au code et compilé avec succès en Win32 Release.
 - Message `PLAYER_LEAVE` lors de la déconnexion d'un client et nettoyage de son dernier instantané : ajoutés et compilés avec succès.
 - OLAN v2 : spécification uniquement, pas encore implémentée.
-- Avatar distant : pas encore implémenté.
+- Avatar distant : prototype same-cell présent et compilé ; affichage, changement de cellule et sauvegardes non validés.
 - Combat, NPC, objets, quêtes et persistance : pas encore implémentés.
