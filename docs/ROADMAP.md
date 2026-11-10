@@ -1,103 +1,128 @@
-# Feuille de route
+# Development Roadmap
 
-Les étapes sont séquentielles. Une étape ne passe à « validée » qu'avec une preuve reproductible.
+This roadmap defines the intended implementation order. A milestone is complete only when its acceptance criteria have been demonstrated and the evidence has been recorded.
 
-## État actuel
+## Current project status
 
-- [x] Dépôt et documentation initiale.
-- [ ] Vérifier Oblivion original en solo, sans mod.
-- [ ] Identifier précisément l'exécutable/runtime installé.
-- [ ] Choisir et documenter la version xOBSE/SDK correspondante.
-- [ ] Préparer l'environnement C++ x86 compatible.
-- [ ] Compiler et charger un plugin xOBSE minimal.
-- [ ] Prototype de protocole réseau autonome.
-- [ ] Connexion LAN entre deux processus de test.
-- [ ] Synchronisation de présence et position de deux joueurs.
-- [ ] Tests de déconnexion/reconnexion et messages invalides.
-- [ ] Prototype d'état persistant géré par le mod.
-- [ ] Synchronisation limitée d'une interaction de monde.
-- [ ] Gestion contrôlée des créatures ordinaires.
-- [ ] Évaluation séparée de la synchronisation des quêtes.
+**Pre-implementation — documentation only.**
 
-## Étape 0 — Baseline du jeu
+The repository does not currently contain a playable plugin, network implementation, installer or release build. The milestones below are planned work, not completed functionality.
 
-Objectif : établir une installation de référence.
+## Milestone overview
 
-Critères :
-- le jeu démarre sans xOBSE ni nouveau mod ;
-- une nouvelle partie peut être lancée ;
-- sauvegarde et rechargement fonctionnent ;
-- la version exacte est consignée ;
-- les sauvegardes de test sont séparées des sauvegardes personnelles.
+| Milestone | Objective | Status |
+|---|---|---|
+| 0 | Establish a clean game baseline | Not started |
+| 1 | Build and load a minimal xOBSE plugin | Not started |
+| 2 | Specify and test a standalone network protocol | Not started |
+| 3 | Establish a two-peer LAN session | Not started |
+| 4 | Synchronize limited in-game player state | Not started |
+| 5 | Persist a limited shared-world interaction | Not started |
+| 6 | Evaluate ordinary creatures and selected quest interactions | Not started |
 
-## Étape 1 — Plugin minimal
+## Milestone 0 — Game baseline
 
-Objectif : prouver que l'environnement de build et le chargement xOBSE fonctionnent.
+**Objective:** establish a reproducible, unmodified test installation.
 
-Critères :
-- architecture x86/Win32 ;
-- versions du runtime, SDK et compilateur consignées ;
-- plugin basé sur l'exemple/API du SDK exact ;
-- initialisation et arrêt sans crash ;
-- journal minimal confirmant le chargement ;
-- test en jeu sur installation de test.
+Acceptance criteria:
 
-Aucun réseau ni accès aux entités du monde à ce stade.
+- [ ] The original game launches without the extension.
+- [ ] A new test game can be started.
+- [ ] Save and reload complete successfully.
+- [ ] The executable version and relevant file hashes are recorded.
+- [ ] Test saves are kept separate from personal saves.
+- [ ] The operating system and test hardware are documented.
 
-## Étape 2 — Protocole autonome
+## Milestone 1 — Minimal xOBSE plugin
 
-Objectif : tester le protocole sans Oblivion.
+**Objective:** prove that the selected build environment and plugin-loading path work.
 
-Critères :
-- format documenté et versionné ;
-- limites de taille strictes ;
-- décodage défensif ;
-- tests des messages tronqués, trop longs, inconnus et mal formés ;
-- aucun accès mémoire hors limites ;
-- test client/serveur local reproductible.
+Acceptance criteria:
 
-## Étape 3 — LAN à deux joueurs
+- [ ] The target architecture is confirmed as x86/Win32.
+- [ ] Exact game, xOBSE, SDK and compiler versions are recorded.
+- [ ] The plugin uses verified interfaces from the selected SDK.
+- [ ] Initialization and shutdown complete without a crash.
+- [ ] A minimal diagnostic confirms plugin loading.
+- [ ] The plugin is tested in a clean test installation.
 
-Objectif : établir une session LAN et afficher la présence des pairs.
+No networking or world-entity manipulation is included in this milestone.
 
-Critères :
-- connexion entre deux PC/processus du même réseau local ;
-- validation côté hôte ;
-- timeout et déconnexion propres ;
-- aucun appel au moteur depuis le thread réseau ;
-- aucun port exposé volontairement à Internet.
+## Milestone 2 — Standalone protocol
 
-## Étape 4 — Synchronisation en jeu
+**Objective:** implement and test the wire protocol independently of Oblivion.
 
-Objectif : synchroniser une donnée limitée et réversible, puis les positions.
+Acceptance criteria:
 
-Critères :
-- deux joueurs visibles dans une zone de test ;
-- fréquence de mise à jour mesurée ;
-- interpolation et correction définies ;
-- transition de cellule testée séparément ;
-- erreurs réseau sans crash ni corruption de sauvegarde.
+- [ ] Message framing and versioning are documented.
+- [ ] Field representation and byte order are explicit.
+- [ ] Message and queue limits are enforced.
+- [ ] Truncated, oversized, unknown and malformed messages are tested.
+- [ ] Invalid input is rejected without out-of-bounds access or unbounded allocation.
+- [ ] A reproducible local client/server test is available.
 
-## Étape 5 — Monde partagé persistant
+## Milestone 3 — Two-peer LAN session
 
-Objectif : partager une petite interaction de monde avec stockage côté hôte.
+**Objective:** establish a session between two peers on the same local network.
 
-Critères :
-- données versionnées ;
-- transactions et sauvegardes testées ;
-- reconnexion et rechargement cohérents ;
-- entités inconnues ou uniques protégées par défaut.
+Acceptance criteria:
 
-## Étape 6 — Créatures et quêtes
+- [ ] Two machines or processes can establish a LAN connection.
+- [ ] The host validates session requests.
+- [ ] Peer identity and protocol compatibility are checked.
+- [ ] Timeouts and clean disconnects are handled.
+- [ ] Network workers do not call the game engine.
+- [ ] The test does not require exposing a service to the public Internet.
 
-Ordre :
-1. créatures ordinaires explicitement identifiées ;
-2. réapparition gérée par le mod ;
-3. interactions de quête limitées ;
-4. tests de conflits et de sauvegarde.
+## Milestone 4 — In-game player synchronization
 
-Les ennemis uniques et entités de quête sont exclus des règles génériques de réapparition. La synchronisation générale des quêtes n'est pas promise.
+**Objective:** synchronize a small, reversible subset of player state.
 
-## Journal des validations
+Acceptance criteria:
 
-Pour chaque étape, consigner date, versions, machine, commandes, résultat, logs utiles et limites connues. Ne pas marquer une case terminée sur la base d'une simple revue théorique.
+- [ ] Two players can be represented in a controlled test area.
+- [ ] Position update frequency and network load are measured.
+- [ ] Interpolation and correction behaviour are documented.
+- [ ] Cell transitions are tested separately.
+- [ ] Disconnects and malformed updates do not crash the game.
+- [ ] No vanilla save corruption is observed in the defined test cases.
+
+## Milestone 5 — Persistent shared-world interaction
+
+**Objective:** share one limited world interaction and preserve its state across sessions.
+
+Acceptance criteria:
+
+- [ ] The host owns the authoritative record.
+- [ ] Data is versioned and validated.
+- [ ] Atomic writes and backups are tested.
+- [ ] Restart, reload and reconnect behaviour is consistent.
+- [ ] Unknown and unique entities are protected by default.
+- [ ] Recovery behaviour is documented.
+
+## Milestone 6 — Creatures and selected quest interactions
+
+**Objective:** expand synchronization without compromising quest state or ordinary gameplay.
+
+Implementation order:
+
+1. Identify and test extension-managed ordinary creatures.
+2. Define safe respawn behaviour for those creatures only.
+3. Select a small set of quest interactions for isolated testing.
+4. Test conflicts, disconnects, save/reload and recovery.
+5. Document unsupported quest and mod combinations.
+
+Unique actors and quest-critical entities must never be included in generic respawn rules. Full synchronization of the vanilla quest system is not promised.
+
+## Validation record
+
+For each completed milestone, record:
+
+- date and milestone identifier;
+- game, xOBSE, SDK and compiler versions;
+- operating system and test configuration;
+- exact test procedure and commands;
+- observed result and relevant sanitized logs;
+- known limitations and unresolved defects.
+
+A milestone must not be marked complete based solely on design review or code inspection.
