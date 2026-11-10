@@ -57,6 +57,7 @@ constexpr char kMagic[4] = {'O', 'L', 'A', 'N'};
 std::string g_pluginDirectory;
 std::string g_logPath;
 OBSETasks2Interface* g_tasks2 = nullptr;
+OBSEConsoleInterface* g_console = nullptr;
 Task<bool>* g_gameThreadTask = nullptr;
 DWORD g_lastPlayerSnapshotLog = 0;
 
@@ -1038,6 +1039,20 @@ bool OBSEPlugin_Load(const OBSEInterface* obse)
     g_remoteSnapshotLockReady = true;
     InitializeCriticalSection(&g_peerLock);
     g_peerLockReady = true;
+
+    // xOBSE's Console interface is the supported bridge for script commands.
+    // It is only used from the game thread; socket workers never call it.
+    g_console = static_cast<OBSEConsoleInterface*>(
+        obse->QueryInterface(kInterface_Console));
+    if (g_console != nullptr &&
+        g_console->version >= OBSEConsoleInterface::kVersion &&
+        g_console->RunScriptLine2 != nullptr)
+        Log("xOBSE Console API available for game-thread script operations.");
+    else
+    {
+        g_console = nullptr;
+        Log("xOBSE Console API unavailable; script-driven world operations are disabled.");
+    }
 
     // Use the SDK's supported main-loop task interface. Game state must only
     // be sampled/applied here, never from the socket worker threads.
