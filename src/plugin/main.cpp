@@ -34,6 +34,8 @@ std::array<SOCKET, 3> g_hostPeers{{INVALID_SOCKET, INVALID_SOCKET, INVALID_SOCKE
 std::array<std::uint16_t, 3> g_hostPeerIds{{0, 0, 0}};
 CRITICAL_SECTION g_snapshotLock{};
 bool g_snapshotLockReady = false;
+CRITICAL_SECTION g_remoteSnapshotLock{};
+bool g_remoteSnapshotLockReady = false;
 struct PlayerSnapshot
 {
     std::uint16_t playerId = 0;
@@ -43,6 +45,8 @@ struct PlayerSnapshot
     float y = 0.0f;
     float z = 0.0f;
 };
+std::array<PlayerSnapshot, 3> g_remoteSnapshots{};
+std::array<bool, 3> g_hasRemoteSnapshot{{false, false, false}};
 PlayerSnapshot g_latestSnapshot{};
 bool g_hasSnapshot = false;
 DWORD g_lastSnapshotSequence = 0;
@@ -118,7 +122,41 @@ bool GameThreadPump()
             player->posX, player->posY, player->posZ);
         Log(message);
     }
+    if (g_remoteSnapshotLockReady)
+    {
+        std::array<PlayerSnapshot, 3> pending{};
+        std::array<bool, 3> present{{false, false, false}};
+        EnterCriticalSection(&g_remoteSnapshotLock);
+        pending = g_remoteSnapshots;
+        present = g_hasRemoteSnapshot;
+        g_hasRemoteSnapshot = {{false, false, false}};
+        LeaveCriticalSection(&g_remoteSnapshotLock);
+        for (std::size_t i = 0; i < pending.size(); ++i)
+        {
+            if (!present[i])
+                continue;
+            char message[160] = {};
+            std::snprintf(message, sizeof(message),
+                "Game-thread received remote snapshot: player=%u seq=%lu cell=%08lX pos=(%.1f, %.1f, %.1f).",
+                static_cast<unsigned>(pending[i].playerId),
+                static_cast<unsigned long>(pending[i].sequence),
+                static_cast<unsigned long>(pending[i].cellId),
+                pending[i].x, pending[i].y, pending[i].z);
+            Log(message);
+        }
+    }
     return false;
+}
+
+void StoreRemoteSnapshot(const PlayerSnapshot& snapshot)
+{
+    if (!g_remoteSnapshotLockReady || snapshot.playerId < 2 || snapshot.playerId > 4)
+        return;
+    const std::size_t index = static_cast<std::size_t>(snapshot.playerId - 2);
+    EnterCriticalSection(&g_remoteSnapshotLock);
+    g_remoteSnapshots[index] = snapshot;
+    g_hasRemoteSnapshot[index] = true;
+    LeaveCriticalSection(&g_remoteSnapshotLock);
 }
 
 bool GetModulePaths()
@@ -410,6 +448,12 @@ DWORD WINAPI PeerWorker(void* parameter)
             break;
         }
         lastAcceptedSequence = sequence;
+        PlayerSnapshot accepted{};
+        accepted.playerId = playerId;
+        accepted.sequence = sequence;
+        accepted.cellId = cellId;
+        accepted.x = x; accepted.y = y; accepted.z = z;
+        StoreRemoteSnapshot(accepted);
         RelaySnapshotToOtherPeers(peer, payload);
         const DWORD now = GetTickCount();
         if (now - lastSnapshotLogAt >= 5000)
@@ -438,7 +482,7 @@ void KeepConnectionUntilClosed(SOCKET peer)
     // stale positions are coalesced instead of building an unbounded backlog.
     DWORD lastSentAt = 0;
     std::uint32_t lastSentSequence = 0;
-    std::array<std::uint32_t, 4> lastRemoteSequence{{0, 0, 0, 0}};
+    std::array<std::uint32_t, 5> lastRemoteSequence{{0, 0, 0, 0, 0}};
     DWORD lastRemoteLogAt = 0;
     for (;;)
     {
@@ -504,7 +548,7 @@ void KeepConnectionUntilClosed(SOCKET peer)
             std::memcpy(&z, &zb, sizeof(z));
             if (remoteId == 0 || remoteId == static_cast<std::uint16_t>(
                     InterlockedCompareExchange(&g_localNetworkPlayerId, 0, 0)) ||
-                remoteId >= lastRemoteSequence.size() || remoteSequence == 0 ||
+                remoteId < 2 || remoteId > 4 || remoteSequence == 0 ||
                 remoteSequence <= lastRemoteSequence[remoteId] ||
                 !std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z) ||
                 std::fabs(x) > 10000000.0f || std::fabs(y) > 10000000.0f ||
@@ -514,6 +558,12 @@ void KeepConnectionUntilClosed(SOCKET peer)
                 continue;
             }
             lastRemoteSequence[remoteId] = remoteSequence;
+            PlayerSnapshot accepted{};
+            accepted.playerId = remoteId;
+            accepted.sequence = remoteSequence;
+            accepted.cellId = read_u32(incoming.data() + 6);
+            accepted.x = x; accepted.y = y; accepted.z = z;
+            StoreRemoteSnapshot(accepted);
             const DWORD receivedAt = GetTickCount();
             if (receivedAt - lastRemoteLogAt >= 5000)
             {
@@ -781,6 +831,8 @@ bool OBSEPlugin_Load(const OBSEInterface* obse)
     WriteLoadLog();
     InitializeCriticalSection(&g_snapshotLock);
     g_snapshotLockReady = true;
+    InitializeCriticalSection(&g_remoteSnapshotLock);
+    g_remoteSnapshotLockReady = true;
     InitializeCriticalSection(&g_peerLock);
     g_peerLockReady = true;
 
