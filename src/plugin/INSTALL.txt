@@ -6,8 +6,11 @@ Cette version démarre un hôte TCP ou se connecte à un hôte LAN depuis le jeu
 L'hôte peut accepter jusqu'à trois clients distants (quatre joueurs au total,
 hôte compris). Les connexions sont gérées dans des threads réseau séparés.
 Le handshake vérifie le protocole OLAN version 1.
-IMPORTANT : il s'agit encore d'un test de connexion. Aucun avatar distant,
-mouvement, combat, créature, objet ou quête n'est synchronisé.
+IMPORTANT : il s'agit encore d'un prototype expérimental, pas d'un multijoueur jouable.
+Le code tente de créer et déplacer un proxy d'avatar distant dans la même cellule,
+mais ce comportement n'a pas encore été validé en jeu ni sur des sauvegardes.
+Aucun combat, créature, objet ou quête n'est synchronisé. Ne pas installer sur
+une sauvegarde importante ; attendre la validation des tests en jeu.
 
 INSTALLATION
 1. Fermer Oblivion sur les deux PC.
