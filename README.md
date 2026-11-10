@@ -9,7 +9,8 @@ Projet expérimental visant à créer un mode multijoueur LAN pour The Elder Scr
 - Le prototype réseau autonome a réussi un handshake entre deux PC sur le LAN.
 - Le plugin intégré démarre un hôte TCP ou un client et effectue un handshake OLAN version 1.
 - L'hôte peut accepter jusqu'à trois clients distants (quatre joueurs au total), avec un thread indépendant par connexion.
-- La compilation du dernier changement doit être vérifiée par GitHub Actions, puis le build doit être testé dans deux instances réelles d'Oblivion.
+- Le dernier changement a été compilé avec succès en Win32 Release par GitHub Actions (build technique uniquement, pas un test en jeu).
+- Une spécification OLAN v2 décrit les futurs paquets de présence et de position ; elle n'est pas encore implémentée.
 
 ## Limite majeure — transparence
 
