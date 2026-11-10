@@ -1,58 +1,57 @@
-OblivionLAN — premier réseau LAN intégré au plugin xOBSE
+OblivionLAN — prototype de connexion LAN intégré à xOBSE
 Cible : The Elder Scrolls IV: Oblivion classique, Steam, xOBSE, Win32.
 
-ÉTAT
-Cette version ajoute une connexion TCP optionnelle au chargement du plugin.
-Elle effectue le handshake réseau et maintient la connexion ouverte.
-Elle ne synchronise PAS encore les positions, les personnages, les combats ou les quêtes.
+ÉTAT EXACT
+Cette version démarre un hôte TCP ou se connecte à un hôte LAN depuis le jeu.
+L'hôte peut accepter jusqu'à trois clients distants (quatre joueurs au total,
+hôte compris). Les connexions sont gérées dans des threads réseau séparés.
+Le handshake vérifie le protocole OLAN version 1.
+IMPORTANT : il s'agit encore d'un test de connexion. Aucun avatar distant,
+mouvement, combat, créature, objet ou quête n'est synchronisé.
 
 INSTALLATION
-1. Fermer Oblivion.
-2. Faire une copie de sauvegarde du dossier Data\OBSE\Plugins s'il existe.
-3. Copier OblivionLAN.dll dans :
-   <dossier Oblivion>\Data\OBSE\Plugins\
+1. Fermer Oblivion sur les deux PC.
+2. Dans le dossier du jeu, ouvrir Data\\OBSE\\Plugins (créer les dossiers s'ils manquent).
+3. Copier OblivionLAN.dll dans Data\\OBSE\\Plugins.
 4. Copier OblivionLAN.ini.example dans le même dossier et le renommer OblivionLAN.ini.
-5. Configurer le fichier comme indiqué ci-dessous.
-6. Pour la version STEAM : vérifier que xOBSE est installé dans le dossier racine du jeu
-   (notamment obse_steam_loader.dll), puis lancer Oblivion depuis Steam
-   ou en ouvrant Oblivion.exe. Ne pas utiliser obse_loader.exe pour lancer
-   normalement la version Steam : ce loader est destiné au lancement de l'éditeur.
-   Pour une version retail non-Steam, utiliser obse_loader.exe.
-7. Consulter OblivionLAN.log dans Data\OBSE\Plugins.
+5. Sur le PC hôte, régler Mode=host. Sur chaque PC client, régler Mode=client
+   et Host= avec l'adresse IPv4 LAN du PC hôte.
+6. Pour Steam, xOBSE doit être installé dans le dossier racine du jeu, avec
+   obse_steam_loader.dll à côté de Oblivion.exe. Lancer Steam puis Oblivion
+   depuis Steam ou directement avec Oblivion.exe.
+7. Démarrer le jeu hôte en premier, attendre le message d'écoute dans
+   OblivionLAN.log, puis démarrer les clients.
+8. Consulter OblivionLAN.log dans Data\\OBSE\\Plugins sur chaque PC.
 
-CONFIGURATION À DEUX PC
-Sur le PC hôte, dans OblivionLAN.ini :
+CONFIGURATION HÔTE
 [Network]
 Mode=host
 Host=127.0.0.1
 Port=47621
 
-Sur le PC client, dans OblivionLAN.ini :
+CONFIGURATION CLIENT
 [Network]
 Mode=client
-Host=<IPv4 du PC hôte>
+Host=192.168.1.XXX
 Port=47621
 
-Remplacer <IPv4 du PC hôte> par l'adresse IPv4 réelle du PC hôte.
-Les deux PC doivent être sur le même réseau local. Autoriser Oblivion dans le pare-feu
-Windows sur le réseau privé si nécessaire. Ne pas exposer le port à Internet.
-Le mode hôte n'accepte qu'un seul client dans cette première étape.
-Le jeu hôte doit avoir chargé le plugin et son journal doit indiquer qu'il écoute
-avant que le client ne tente de se connecter.
+Remplacer 192.168.1.XXX par l'adresse IPv4 réelle du PC hôte.
+Les deux PC doivent être sur le même réseau local. Autoriser Oblivion dans
+le pare-feu Windows sur le réseau privé si nécessaire. Ne pas exposer le port
+à Internet. Jusqu'à trois clients peuvent se connecter à un hôte.
 
 DÉPANNAGE
 - Mode=disabled désactive le réseau sans désactiver le plugin.
-- « bind/listen failed » : le port est peut-être déjà utilisé ou bloqué.
+- « host bind/listen failed » : le port est peut-être déjà utilisé.
 - « could not connect » : vérifier l'adresse, que l'hôte écoute, et le pare-feu privé.
-- Si xOBSE ne se charge pas sur Steam, vérifier la présence de obse_steam_loader.dll
-  dans le dossier racine et activer l'overlay Steam. Si nécessaire, fermer Steam,
-  le relancer en tant qu'administrateur, puis démarrer le jeu depuis Steam.
+- « invalid or timed-out handshake » : vérifier que les deux PC utilisent le même build.
+- Si xOBSE ne se charge pas sur Steam, vérifier obse_steam_loader.dll dans le
+  dossier racine et activer l'overlay Steam. Redémarrer Steam peut aider.
 - Les messages réseau sont consignés dans OblivionLAN.log.
 - Pour désactiver le réseau, remettre Mode=disabled puis relancer le jeu.
-- Pour désactiver complètement le plugin, fermer le jeu et retirer OblivionLAN.dll.
 
 SÉCURITÉ ET LIMITES
-Tester sur une installation et une sauvegarde de test.
-Ne pas utiliser une sauvegarde importante pour les premières validations.
-Un build réussi ne prouve pas le chargement ou la compatibilité en jeu.
-Cette étape ne crée aucun personnage visible dans le monde.
+Tester sur une copie de sauvegarde. Ne pas utiliser une sauvegarde importante
+pour les premières validations. Le LAN n'est pas une frontière de sécurité :
+ne pas ouvrir le port sur Internet. Un build réussi ne prouve pas le chargement
+ou la compatibilité en jeu. Cette version ne crée aucun personnage visible.
