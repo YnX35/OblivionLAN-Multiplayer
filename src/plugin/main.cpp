@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <new>
 #include <string>
 #include <vector>
 
@@ -21,6 +22,8 @@ constexpr std::uint16_t kHello = 1;
 constexpr std::uint16_t kWelcome = 2;
 constexpr std::uint32_t kMaxPayload = 256;
 constexpr unsigned short kDefaultPort = 47621;
+constexpr LONG kMaxRemotePlayers = 3; // Up to four players including the host.
+volatile LONG g_connectedClients = 0;
 constexpr char kMagic[4] = {'O', 'L', 'A', 'N'};
 
 std::string g_pluginDirectory;
@@ -198,10 +201,21 @@ bool acceptHello(SOCKET socket)
     return send_frame(socket, kWelcome, welcome);
 }
 
-void KeepConnectionUntilClosed(SOCKET peer)
+struct PeerContext
 {
-    // This first in-game milestone only holds the connection open.
-    // Gameplay packets and player transforms are not implemented yet.
+    SOCKET socket;
+};
+
+DWORD WINAPI PeerWorker(void* parameter)
+{
+    PeerContext* context = static_cast<PeerContext*>(parameter);
+    if (context == nullptr)
+        return 0;
+
+    const SOCKET peer = context->socket;
+    delete context;
+
+    // Gameplay packets are not implemented yet. Wait for a clean peer shutdown.
     char ignored = 0;
     for (;;)
     {
@@ -209,9 +223,12 @@ void KeepConnectionUntilClosed(SOCKET peer)
         if (result <= 0)
             break;
     }
+
     shutdown(peer, SD_BOTH);
     closesocket(peer);
+    InterlockedDecrement(&g_connectedClients);
     Log("Peer disconnected.");
+    return 0;
 }
 
 DWORD WINAPI NetworkWorker(void*)
@@ -279,31 +296,67 @@ DWORD WINAPI NetworkWorker(void*)
             "Network host listening on TCP port %u.", static_cast<unsigned>(port));
         Log(message);
 
-        SOCKET peer = accept(listener, nullptr, nullptr);
-        closesocket(listener);
-        if (peer == INVALID_SOCKET)
+        Log("Host is ready for up to three remote players.");
+        for (;;)
         {
-            Log("Network error: host accept failed.");
-            WSACleanup();
-            return 0;
-        }
+            SOCKET peer = accept(listener, nullptr, nullptr);
+            if (peer == INVALID_SOCKET)
+            {
+                Log("Network warning: accept failed; host listener remains active.");
+                Sleep(250);
+                continue;
+            }
 
-        DWORD handshakeTimeoutMs = 5000;
-        setsockopt(peer, SOL_SOCKET, SO_RCVTIMEO,
-            reinterpret_cast<const char*>(&handshakeTimeoutMs), sizeof(handshakeTimeoutMs));
-        if (!acceptHello(peer))
-        {
-            Log("Network error: invalid client handshake.");
-            shutdown(peer, SD_BOTH);
-            closesocket(peer);
-            WSACleanup();
-            return 0;
+            if (InterlockedCompareExchange(&g_connectedClients, 0, 0) >= kMaxRemotePlayers)
+            {
+                Log("Connection refused: host already has three remote players.");
+                shutdown(peer, SD_BOTH);
+                closesocket(peer);
+                continue;
+            }
+
+            DWORD handshakeTimeoutMs = 5000;
+            setsockopt(peer, SOL_SOCKET, SO_RCVTIMEO,
+                reinterpret_cast<const char*>(&handshakeTimeoutMs), sizeof(handshakeTimeoutMs));
+            setsockopt(peer, SOL_SOCKET, SO_SNDTIMEO,
+                reinterpret_cast<const char*>(&handshakeTimeoutMs), sizeof(handshakeTimeoutMs));
+            if (!acceptHello(peer))
+            {
+                Log("Network warning: rejected client with invalid or timed-out handshake.");
+                shutdown(peer, SD_BOTH);
+                closesocket(peer);
+                continue;
+            }
+
+            handshakeTimeoutMs = 0;
+            setsockopt(peer, SOL_SOCKET, SO_RCVTIMEO,
+                reinterpret_cast<const char*>(&handshakeTimeoutMs), sizeof(handshakeTimeoutMs));
+            setsockopt(peer, SOL_SOCKET, SO_SNDTIMEO,
+                reinterpret_cast<const char*>(&handshakeTimeoutMs), sizeof(handshakeTimeoutMs));
+
+            PeerContext* context = new (std::nothrow) PeerContext{peer};
+            if (context == nullptr)
+            {
+                Log("Network error: not enough memory for peer context.");
+                shutdown(peer, SD_BOTH);
+                closesocket(peer);
+                continue;
+            }
+
+            InterlockedIncrement(&g_connectedClients);
+            HANDLE peerThread = CreateThread(nullptr, 0, PeerWorker, context, 0, nullptr);
+            if (peerThread == nullptr)
+            {
+                InterlockedDecrement(&g_connectedClients);
+                delete context;
+                shutdown(peer, SD_BOTH);
+                closesocket(peer);
+                Log("Network error: could not start peer thread.");
+                continue;
+            }
+            CloseHandle(peerThread);
+            Log("LAN handshake successful: client connected to Oblivion host.");
         }
-        handshakeTimeoutMs = 0;
-        setsockopt(peer, SOL_SOCKET, SO_RCVTIMEO,
-            reinterpret_cast<const char*>(&handshakeTimeoutMs), sizeof(handshakeTimeoutMs));
-        Log("LAN handshake successful: client connected to Oblivion host.");
-        KeepConnectionUntilClosed(peer);
     }
     else if (_stricmp(mode, "client") == 0)
     {
