@@ -4,7 +4,7 @@
 
 Ce document définit la prochaine évolution du protocole du projet pour **Oblivion classique 32 bits (2006)**. Il ne décrit pas OB:MP de ReadyM comme une dépendance : le projet ReadyM cible Oblivion Remastered et son environnement technique est différent.
 
-La version actuellement intégrée au plugin est encore **OLAN v1** : elle effectue uniquement un handshake TCP. Elle n'échange aucun état de gameplay. La version ci-dessous est une spécification de travail pour l'évolution suivante ; elle n'est pas encore implémentée.
+La version actuellement intégrée au plugin utilise encore l'en-tête **OLAN v1**. Elle effectue le handshake TCP et transporte désormais un premier message `PLAYER_SNAPSHOT` du client vers l'hôte. Ce premier paquet est volontairement limité à l'identifiant réseau attribué par l'hôte, un numéro de séquence, l'identifiant de cellule et la position XYZ. L'hôte valide et journalise ces paquets ; il ne les relaie pas encore aux autres joueurs et aucun avatar distant n'est créé. La spécification v2 ci-dessous reste une cible future.
 
 ## Transport
 
@@ -98,9 +98,11 @@ Le flag Persistent ne suffit pas à lui seul à rendre un objet synchronisable. 
 
 ## État d'implémentation
 
-- OLAN v1 : handshake TCP uniquement, intégré.
-- xOBSE Tasks2 : point d'exécution récurrent et lecture diagnostique locale, intégré dans le code.
+- OLAN v1 : handshake TCP et premier paquet de position client → hôte, intégrés dans le code.
+- xOBSE Tasks2 : capture périodique de la position locale et dépôt dans un instantané partagé entre threads.
+- Hôte : validation de l'identifiant joueur, de la séquence, des coordonnées finies et de leur plage ; aucune application au moteur.
+- Client : envoi du dernier instantané environ toutes les 100 ms ; les anciennes positions sont coalescées.
+- Relais hôte → autres clients : pas encore implémenté.
 - OLAN v2 : spécification uniquement, pas encore implémentée.
-- Échange de positions : pas encore implémenté.
 - Avatar distant : pas encore implémenté.
 - Combat, NPC, objets, quêtes et persistance : pas encore implémentés.
