@@ -1,22 +1,21 @@
-# Plugin xOBSE avec première connexion LAN
+# Plugin xOBSE — prototype de connexion LAN
 
-## État
+## Fonctionnalités implémentées
 
-Le plugin contient maintenant une couche réseau TCP optionnelle, activée par un fichier `OblivionLAN.ini` placé à côté de `OblivionLAN.dll`.
+- Mode=disabled : réseau désactivé.
+- Mode=host : écoute sur le port TCP configuré et accepte jusqu'à trois clients distants.
+- Mode=client : se connecte à l'adresse IPv4 configurée.
+- Handshake OLAN version 1, avec en-tête et tailles de messages bornées.
+- Le travail réseau s'exécute dans des threads séparés et n'appelle pas le moteur Oblivion.
+- Journalisation dans OblivionLAN.log.
+- Un client déconnecté libère son emplacement ; l'hôte continue d'écouter.
 
-- `Mode=disabled` : réseau désactivé.
-- `Mode=host` : écoute sur le port TCP configuré et accepte un client.
-- `Mode=client` : se connecte à l'adresse IPv4 configurée.
-- Le protocole est compatible avec le prototype autonome : en-tête `OLAN`, version 1, HELLO/WELCOME, tailles bornées.
-- Le travail réseau s'exécute dans un thread distinct ; il n'appelle pas le moteur Oblivion.
-- Le plugin maintient la connexion ouverte après le handshake et écrit les événements dans `OblivionLAN.log`.
+## Limites
 
-## Limites importantes
+Cette version ne synchronise aucun gameplay. Elle ne transmet pas les positions et ne crée pas d'avatar distant. Les messages de gameplay, l'interface sûre avec le thread du jeu, la reconnexion, les entités, les quêtes et la persistance ne sont pas implémentés.
 
-Cette étape n'envoie aucune position de joueur et ne crée pas d'avatar distant. Le thread réseau ne doit pas être utilisé pour appeler des fonctions du moteur. La connexion intégrée doit être compilée et testée dans deux instances réelles d'Oblivion avant d'être considérée comme validée.
-
-Le mode hôte n'accepte qu'un client. Les messages de gameplay, reconnexion, déconnexion propre côté jeu, synchronisation de cellules, combat, entités et sauvegardes ne sont pas encore implémentés.
+Un build réussi ne prouve pas le chargement ni le fonctionnement en jeu. Tester sur des copies de sauvegardes et sur un réseau local privé uniquement.
 
 ## Configuration
 
-Voir `INSTALL.txt` et `OblivionLAN.ini.example`. Commencer par `Mode=disabled` si un test réseau n'est pas souhaité.
+Voir INSTALL.txt et OblivionLAN.ini.example.
