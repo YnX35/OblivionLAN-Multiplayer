@@ -1,94 +1,158 @@
-# Architecture proposée
+# Technical Architecture
 
-Statut : proposition de conception. Aucun composant décrit ici n'est implémenté ni validé en jeu.
+**Document status:** proposed design. The components described here have not yet been implemented or validated in-game.
 
-## 1. Vue d'ensemble
+## 1. Scope and design objectives
 
-Deux couches sont envisagées :
+The initial architecture targets the original 32-bit PC release of *The Elder Scrolls IV: Oblivion*, extended through xOBSE. The first networking milestone is a two-player LAN prototype, with a longer-term target of two to four players.
 
-1. Intégration jeu : plugin xOBSE x86 chargé dans Oblivion. Il observe les événements pertinents et applique les changements sur le thread approprié du jeu.
-2. Couche réseau et état partagé : protocole indépendant du moteur, gestion de session, validation côté hôte et persistance des données du mod.
+The design prioritizes:
 
-Schéma conceptuel :
+- isolation between networking and game-engine operations;
+- host-authoritative shared state;
+- bounded resource usage and defensive input validation;
+- minimal impact on vanilla save files;
+- incremental implementation with independently testable components.
 
-    Client Oblivion A ─┐
-                       ├─ LAN ─ Hôte Oblivion + autorité du monde
-    Client Oblivion B ─┘                    |
-                                           ├─ validation des actions
-                                           ├─ état partagé
-                                           └─ stockage persistant du mod
+## 2. System overview
 
-Dans une partie à deux joueurs, l'un des clients héberge aussi l'autorité. Aucun serveur dédié n'est requis pour le prototype.
+The proposed system has four logical components:
 
-## 2. Autorité et cohérence
+1. **Game integration:** an xOBSE plugin loaded into each game process.
+2. **Session transport:** connection handling and message exchange over the LAN.
+3. **Session authority:** host-side validation and coordination of shared state.
+4. **Persistence:** storage and recovery of data owned by the multiplayer extension.
 
-L'hôte est seul responsable de valider les changements partagés. Un client peut demander une action ; il ne peut pas imposer directement un nouvel état.
+Conceptual topology:
 
-Exemples à valider côté hôte : présence des joueurs, interaction avec un objet partagé, état d'une créature gérée par le mod et progression d'une quête explicitement prise en charge.
+```text
++-------------------+        LAN        +----------------------------+
+| Player client A   |<----------------->|                            |
+| Oblivion + plugin |                   | Host player                 |
++-------------------+                   | Oblivion + plugin            |
+                                        | Session authority            |
++-------------------+        LAN        | Shared-state persistence     |
+| Player client B   |<----------------->|                            |
+| Oblivion + plugin |                   +----------------------------+
++-------------------+
+```
 
-Les règles de résolution des conflits restent à spécifier. La synchronisation des quêtes est risquée : les scripts vanilla peuvent déclencher des effets locaux ou irréversibles. Commencer par un périmètre limité et testé.
+The host is also an active player. A separate dedicated server is not required for the initial design.
 
-## 3. Frontière réseau / moteur
+## 3. Authority and state ownership
 
-Le thread réseau ne doit pas appeler les fonctions internes d'Oblivion.
+The host is the authority for shared multiplayer state. Clients submit requests or player actions; they do not directly overwrite authoritative state.
 
-Flux envisagé :
-1. recevoir des octets ;
-2. vérifier taille maximale et framing ;
-3. décoder avec des conversions explicites ;
-4. vérifier version, type, identifiants et valeurs ;
-5. placer une commande validée dans une file bornée ;
-6. traiter depuis le thread sûr du jeu ;
-7. renvoyer le résultat validé par l'hôte.
+Candidate host-owned data includes:
 
-Les files doivent être bornées. Une surcharge produit une erreur contrôlée ou une déconnexion, jamais une croissance mémoire illimitée.
+- session membership and player identifiers;
+- supported shared interactions;
+- explicitly supported quest progression;
+- entities created or managed by the multiplayer extension;
+- persistent multiplayer-world records.
 
-## 4. Protocole réseau
+The exact ownership rules and conflict-resolution model must be specified before implementation.
 
-Le protocole n'est pas encore choisi. Spécifier avant implémentation :
-- identifiant magique et version ;
-- type de message ;
-- longueur avec limite stricte ;
-- identifiant de session et séquence ;
-- encodage explicite des nombres et ordre des octets ;
-- comportement face aux messages inconnus, incomplets, dupliqués ou hors ordre ;
-- timeout et fermeture propre.
+### Quest and encounter boundaries
 
-Ne pas envoyer directement des structs C++ sur le réseau : padding, alignement et représentation peuvent varier. Ne jamais faire confiance à une longueur annoncée par un pair.
+Quest scripts in the original game may trigger local side effects, alter persistent records or depend on player-specific state. General quest synchronization must therefore not be assumed.
 
-Le choix TCP/UDP ou hybride reste ouvert. Le décider après un prototype réseau autonome et des mesures simples sur LAN.
+The implementation should begin with a deliberately limited set of reversible interactions. Ordinary encounters outside supported shared quest scenarios should remain independent unless a specific feature requires otherwise. Unique actors and quest-critical entities must be excluded from generic respawn or cleanup rules.
 
-## 5. Identifiants et entités du monde
+## 4. Game-thread boundary
 
-Ne pas supposer que les FormID sont universellement identiques dans toutes les installations et avec tous les ordres de mods. Une stratégie d'identification partagée doit être définie et testée.
+Networking code must never call internal game-engine functions directly.
 
-Chaque entité synchronisée devra avoir une catégorie explicite : joueur, créature ordinaire gérée par le mod, entité unique ou de quête, objet partagé, état de quête pris en charge.
+Proposed processing flow:
 
-Par défaut, une entité non reconnue ne doit pas être réinitialisée ou supprimée par le système multijoueur.
+1. Receive network bytes on a networking worker.
+2. Enforce framing and maximum message size.
+3. Decode fields using explicit byte-order and type conversions.
+4. Validate protocol version, message type, identifiers and value ranges.
+5. Place validated commands into a bounded queue.
+6. Process game-related operations from a verified safe game-thread context.
+7. Return the host-approved result to connected peers.
 
-## 6. Persistance
+Queue capacity, overflow policy, thread ownership and shutdown ordering must be defined and tested. Queue saturation must produce a controlled failure, not unbounded memory growth.
 
-La persistance du mod devra être séparée autant que possible des sauvegardes vanilla. SQLite est une option candidate, pas un choix définitif.
+## 5. Network protocol
 
-À spécifier : schéma versionné, transactions atomiques, sauvegarde/restauration, migrations, identité de session et du monde, comportement si la base est absente, verrouillée ou corrompue.
+No transport or serialization format has been selected. A protocol specification must define:
 
-L'hôte est la source de vérité pour les données partagées. Les clients ne doivent pas pouvoir écraser directement la base de l'hôte.
+- protocol identifier and version;
+- message type and framing;
+- strict maximum message and field lengths;
+- session and peer identifiers;
+- sequence numbers and duplicate handling;
+- explicit integer representation and byte order;
+- handling of unknown, malformed, truncated and out-of-order messages;
+- connection timeout, heartbeat and clean shutdown behaviour.
 
-## 7. Sécurité et robustesse
+Raw C++ structures must not be transmitted directly. Padding, alignment and representation are not stable wire formats. A peer-provided length must never be trusted without validation.
 
-Le LAN n'est pas une frontière de confiance. Limiter tailles de paquets et files ; rejeter valeurs non finies ou hors limites ; limiter le débit ; ne jamais interpréter les données réseau comme du code ou des chemins ; ne pas exposer de port sur Internet ; ne pas écrire dans les fichiers du jeu à partir d'une donnée réseau ; journaliser sans secrets.
+TCP, UDP or a hybrid approach remains an open decision. It should be selected after a standalone prototype and measurements on a local network.
 
-Voir SECURITY.md.
+## 6. World and entity identity
 
-## 8. Décisions ouvertes
+Vanilla FormIDs must not be assumed to be globally stable across installations, load orders or mod configurations.
 
-- Version exacte du runtime Oblivion et de xOBSE.
-- Version et disposition du SDK.
-- Compilateur/IDE compatible avec la machine.
-- Bibliothèque réseau et modèle TCP/UDP.
-- Format de sérialisation.
-- Threading et mécanisme de file.
-- Stratégie d'identité des références du monde.
-- Stratégie de persistance et de sauvegarde.
+A multiplayer identity scheme must be designed for each supported entity category. Candidate categories include:
 
-Aucune de ces décisions n'est déjà validée.
+- connected player;
+- extension-managed ordinary creature;
+- unique or quest-critical actor;
+- shared interactive object;
+- explicitly supported quest state.
+
+Unknown or unclassified entities must be left untouched by default. The extension must not generically delete, reset or respawn entities it cannot safely identify.
+
+## 7. Persistence and recovery
+
+Multiplayer-owned data should be stored separately from vanilla save data wherever practical. SQLite is a candidate, not a final decision.
+
+The persistence design must address:
+
+- schema versioning and migrations;
+- atomic writes and transaction boundaries;
+- world and session identity;
+- backup and restore;
+- missing, locked or corrupted storage;
+- interrupted writes and unexpected process termination;
+- host recovery and client reconnection.
+
+Only the host may commit authoritative shared-state changes. Clients must not be able to overwrite host-owned records.
+
+## 8. Security and resilience
+
+A local network is not a trusted boundary. Every message must be treated as untrusted input.
+
+The implementation must:
+
+- cap message sizes, queue lengths and processing rates;
+- reject malformed, non-finite and out-of-range values;
+- handle incompatible protocol versions explicitly;
+- avoid interpreting network data as executable code or file paths;
+- never write to game files based on a remote-supplied path;
+- keep the initial service LAN-scoped;
+- avoid requiring users to disable their firewall or security software;
+- log useful diagnostics without exposing secrets or personal data.
+
+See [SECURITY.md](../SECURITY.md) for the project security policy.
+
+## 9. Open technical decisions
+
+The following decisions require prototypes or verified documentation:
+
+| Area | Current status |
+|---|---|
+| Exact Oblivion runtime | To be confirmed and recorded |
+| xOBSE release and SDK | To be selected and pinned |
+| Compiler and build system | To be selected for the x86 target |
+| Transport | Open |
+| Serialization format | Open |
+| Threading and queue implementation | Open |
+| Shared entity identity | Open |
+| Persistence backend | Open |
+| Supported quest scope | Open |
+
+No compatibility or performance claim should be made until the relevant decision has been implemented and tested.
