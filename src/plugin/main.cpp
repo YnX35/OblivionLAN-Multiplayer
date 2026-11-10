@@ -364,6 +364,44 @@ bool RegisterHostPeer(SOCKET peer, std::uint16_t playerId)
             break;
         }
     }
+    if (registered && g_snapshotLockReady)
+    {
+        // Give a newly joined client the host's current position immediately,
+        // even if the host has not moved since this client connected.
+        PlayerSnapshot snapshot{};
+        bool available = false;
+        EnterCriticalSection(&g_snapshotLock);
+        if (g_hasSnapshot && g_latestSnapshot.playerId == 1)
+        {
+            snapshot = g_latestSnapshot;
+            available = true;
+        }
+        LeaveCriticalSection(&g_snapshotLock);
+
+        if (available)
+        {
+            std::vector<std::uint8_t> payload;
+            payload.reserve(22);
+            put_u16(payload, snapshot.playerId);
+            put_u32(payload, snapshot.sequence);
+            put_u32(payload, snapshot.cellId);
+            std::uint32_t bits = 0;
+            std::memcpy(&bits, &snapshot.x, sizeof(bits)); put_u32(payload, bits);
+            std::memcpy(&bits, &snapshot.y, sizeof(bits)); put_u32(payload, bits);
+            std::memcpy(&bits, &snapshot.z, sizeof(bits)); put_u32(payload, bits);
+            if (!send_frame(peer, kPlayerSnapshot, payload))
+            {
+                for (std::size_t i = 0; i < g_hostPeers.size(); ++i)
+                    if (g_hostPeers[i] == peer)
+                    {
+                        g_hostPeers[i] = INVALID_SOCKET;
+                        g_hostPeerIds[i] = 0;
+                        break;
+                    }
+                registered = false;
+            }
+        }
+    }
     LeaveCriticalSection(&g_peerLock);
     return registered;
 }
