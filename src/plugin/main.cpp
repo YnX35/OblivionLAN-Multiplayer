@@ -281,6 +281,7 @@ DWORD WINAPI PeerWorker(void* parameter)
         return 0;
 
     const SOCKET peer = context->socket;
+    const std::uint16_t assignedPlayerId = context->playerId;
     delete context;
 
     // Receive client position snapshots on this worker only. Engine calls stay
@@ -301,7 +302,7 @@ DWORD WINAPI PeerWorker(void* parameter)
         std::memcpy(&x, &xb, sizeof(x));
         std::memcpy(&y, &yb, sizeof(y));
         std::memcpy(&z, &zb, sizeof(z));
-        if (playerId != context->playerId || sequence == 0 ||
+        if (playerId != assignedPlayerId || sequence == 0 ||
             !std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z) ||
             std::fabs(x) > 10000000.0f || std::fabs(y) > 10000000.0f ||
             std::fabs(z) > 10000000.0f)
