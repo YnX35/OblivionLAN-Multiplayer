@@ -15,9 +15,10 @@ Une étape ne passe à « validée » qu'avec une preuve reproductible. « Impl�
 - [x] Compiler le dernier changement et inspecter le build (GitHub Actions Win32 Release : succès).
 - [x] Ajouter un point d'exécution récurrent sur la boucle principale via l'interface xOBSE Tasks2 (capture du joueur en lecture seule, diagnostic).
 - [ ] Tester le handshake depuis deux instances réelles d'Oblivion.
-- [ ] Ajouter une file de messages bornée entre réseau et thread de jeu.
+- [x] Ajouter un instantané joueur partagé de manière thread-safe entre la boucle de jeu et le worker client (dernier état coalescé, pas de file non bornée).
 - [x] Définir la spécification OLAN v2 (paquets joueur, séquences, limites, autorité hôte) ; spécification seulement, pas encore codée.
 - [ ] Identifier et tester une méthode sûre pour lire l'état du joueur.
+- [ ] Relayer les snapshots clients depuis l'hôte vers les autres clients.
 - [ ] Synchroniser la présence puis la position de deux joueurs dans une zone de test.
 - [ ] Créer un avatar distant sans corrompre les sauvegardes ni les références.
 - [ ] Tester déconnexion, fermeture du jeu, timeout et messages invalides.
@@ -42,9 +43,9 @@ Le plugin enregistre maintenant une tâche récurrente via `OBSETasks2Interface:
 
 Le projet externe [ObMultiplayerServer](https://github.com/theturrell/ObMultiplayerServer) a été étudié comme référence fonctionnelle pour les catégories d'état (joueur, combat, quêtes, butin) et le relais. Son adaptateur de jeu utilise aussi des adresses mémoire runtime codées en dur et des commandes console expérimentales ; ces parties ne sont pas reprises sans vérification indépendante, car elles risqueraient de casser selon la version ou les sauvegardes.
 
-## Étape suivante — présence et position
+## Étape suivante — relais et présence des joueurs
 
-Capturer un instantané joueur à intervalle borné sur la boucle principale, l'encoder dans le protocole réseau avec des champs explicites, puis le transmettre par le worker réseau. Les instantanés entrants devront passer par une file bornée avant toute application sur la boucle du jeu. Aucune adresse mémoire ou fonction du moteur ne sera appelée directement depuis le thread réseau.
+Le client capture un instantané sur la boucle principale et envoie le dernier état environ toutes les 100 ms. L'hôte vérifie l'identifiant attribué, le numéro de séquence et les coordonnées ; les paquets invalides ferment la connexion. À ce stade, l'hôte ne relaie pas encore les positions et aucun avatar distant n'est affiché. La prochaine étape est un relais hôte → clients, puis une file entrante bornée et une méthode sûre de création d'avatar. Aucune fonction du moteur n'est appelée depuis un thread Winsock.
 
 Les positions ne suffisent pas à créer un avatar distant : il faudra ensuite identifier une méthode documentée et sûre pour représenter un autre joueur sans corrompre les sauvegardes ni les références du monde.
 
