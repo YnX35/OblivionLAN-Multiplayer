@@ -14,6 +14,7 @@
 #include <new>
 #include <string>
 #include <vector>
+#include <set>
 
 #pragma comment(lib, "Ws2_32.lib")
 
@@ -49,6 +50,14 @@ struct PlayerSnapshot
 std::array<PlayerSnapshot, 4> g_remoteSnapshots{};
 std::array<bool, 4> g_hasRemoteSnapshot{{false, false, false, false}};
 std::array<std::uint32_t, 4> g_lastConsumedRemoteSequence{{0, 0, 0, 0}};
+struct RemoteAvatar
+{
+    TESObjectREFR* reference = nullptr;
+    std::uint32_t cellId = 0;
+    bool visible = false;
+    bool spawnAttempted = false;
+};
+std::array<RemoteAvatar, 4> g_remoteAvatars{};
 PlayerSnapshot g_latestSnapshot{};
 bool g_hasSnapshot = false;
 DWORD g_lastSnapshotSequence = 0;
@@ -157,6 +166,145 @@ bool GameThreadPump()
         }
     }
     return false;
+}
+
+bool RunGameScript(const char* command, TESObjectREFR* callingReference)
+{
+    return g_console != nullptr &&
+        g_console->version >= OBSEConsoleInterface::kVersion &&
+        g_console->RunScriptLine2 != nullptr &&
+        command != nullptr &&
+        g_console->RunScriptLine2(command, callingReference, true);
+}
+
+std::set<UInt32> SnapshotCellReferenceIds(TESObjectCELL* cell)
+{
+    std::set<UInt32> ids;
+    if (cell == nullptr)
+        return ids;
+    for (TESObjectCELL::ObjectListEntry* entry = cell->objectList.next;
+         entry != nullptr; entry = entry->next)
+    {
+        if (entry->refr != nullptr)
+            ids.insert(entry->refr->refID);
+    }
+    return ids;
+}
+
+TESObjectREFR* FindNewRemoteReference(
+    TESObjectCELL* cell,
+    const std::set<UInt32>& beforeIds,
+    TESForm* expectedBase,
+    TESObjectREFR* localPlayer)
+{
+    if (cell == nullptr || expectedBase == nullptr)
+        return nullptr;
+    for (TESObjectCELL::ObjectListEntry* entry = cell->objectList.next;
+         entry != nullptr; entry = entry->next)
+    {
+        TESObjectREFR* reference = entry->refr;
+        if (reference == nullptr || reference == localPlayer)
+            continue;
+        if (beforeIds.find(reference->refID) != beforeIds.end())
+            continue;
+        if (reference->baseForm == expectedBase)
+            return reference;
+    }
+    return nullptr;
+}
+
+void SetRemoteAvatarPosition(TESObjectREFR* reference, const PlayerSnapshot& snapshot)
+{
+    if (reference == nullptr)
+        return;
+    char command[96] = {};
+    const char* axes[] = {"x", "y", "z"};
+    const float values[] = {snapshot.x, snapshot.y, snapshot.z};
+    for (int i = 0; i < 3; ++i)
+    {
+        std::snprintf(command, sizeof(command), "SetPos_T %s %.3f", axes[i], values[i]);
+        RunGameScript(command, reference);
+    }
+}
+
+void HideRemoteAvatar(RemoteAvatar& avatar)
+{
+    if (avatar.reference != nullptr && avatar.visible)
+        RunGameScript("Disable", avatar.reference);
+    avatar.visible = false;
+}
+
+void ApplyRemoteAvatar(
+    std::size_t index,
+    const PlayerSnapshot& snapshot,
+    PlayerCharacter* localPlayer)
+{
+    if (index >= g_remoteAvatars.size() || localPlayer == nullptr ||
+        localPlayer->parentCell == nullptr || g_console == nullptr)
+        return;
+
+    RemoteAvatar& avatar = g_remoteAvatars[index];
+    const std::uint32_t localCellId = localPlayer->parentCell->refID;
+    if (snapshot.cellId != localCellId)
+    {
+        HideRemoteAvatar(avatar);
+        return; // First prototype is deliberately same-cell only.
+    }
+
+    if (avatar.reference != nullptr)
+    {
+        if (avatar.reference->parentCell != localPlayer->parentCell)
+        {
+            HideRemoteAvatar(avatar);
+            return; // Never create repeated references while crossing cells.
+        }
+        if (!avatar.visible)
+        {
+            if (!RunGameScript("Enable", avatar.reference))
+                return;
+            avatar.visible = true;
+        }
+        SetRemoteAvatarPosition(avatar.reference, snapshot);
+        return;
+    }
+
+    if (avatar.spawnAttempted)
+        return; // Avoid repeated PlaceAtMe calls if discovery fails.
+    avatar.spawnAttempted = true;
+
+    TESForm* baseForm = localPlayer->baseForm;
+    if (baseForm == nullptr)
+    {
+        Log("Remote avatar spawn skipped: local player base form is unavailable.");
+        return;
+    }
+
+    const std::set<UInt32> beforeIds = SnapshotCellReferenceIds(localPlayer->parentCell);
+    char command[96] = {};
+    std::snprintf(command, sizeof(command), "PlaceAtMe %08lX 1 0 0",
+        static_cast<unsigned long>(baseForm->refID));
+    if (!RunGameScript(command, localPlayer))
+    {
+        Log("Remote avatar spawn failed: xOBSE PlaceAtMe command was rejected.");
+        return;
+    }
+
+    TESObjectREFR* spawned = FindNewRemoteReference(
+        localPlayer->parentCell, beforeIds, baseForm, localPlayer);
+    if (spawned == nullptr)
+    {
+        Log("Remote avatar spawn unresolved: no new matching reference was found.");
+        return;
+    }
+
+    avatar.reference = spawned;
+    avatar.cellId = localCellId;
+    RunGameScript("SetGhost 1", spawned);
+    RunGameScript("SetRestrained 1", spawned);
+    RunGameScript("SetAV Speed 0", spawned);
+    avatar.visible = true;
+    SetRemoteAvatarPosition(spawned, snapshot);
+    Log("Remote same-cell avatar created and attached to the remote player slot.");
 }
 
 void StoreRemoteSnapshot(const PlayerSnapshot& snapshot)
