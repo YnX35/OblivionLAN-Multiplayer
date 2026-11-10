@@ -127,17 +127,24 @@ bool GameThreadPump()
     if (g_remoteSnapshotLockReady)
     {
         std::array<PlayerSnapshot, 4> pending{};
-        std::array<bool, 4> present{{false, false, false, false}};
+        std::array<bool, 4> changed{{false, false, false, false}};
         EnterCriticalSection(&g_remoteSnapshotLock);
         pending = g_remoteSnapshots;
-        present = g_hasRemoteSnapshot;
+        for (std::size_t i = 0; i < pending.size(); ++i)
+        {
+            if (!g_hasRemoteSnapshot[i])
+                g_lastConsumedRemoteSequence[i] = 0;
+            else if (pending[i].sequence != g_lastConsumedRemoteSequence[i])
+            {
+                changed[i] = true;
+                g_lastConsumedRemoteSequence[i] = pending[i].sequence;
+            }
+        }
         LeaveCriticalSection(&g_remoteSnapshotLock);
         for (std::size_t i = 0; i < pending.size(); ++i)
         {
-            if (!present[i] ||
-                pending[i].sequence == g_lastConsumedRemoteSequence[i])
+            if (!changed[i])
                 continue;
-            g_lastConsumedRemoteSequence[i] = pending[i].sequence;
             char message[160] = {};
             std::snprintf(message, sizeof(message),
                 "Game-thread received remote snapshot: player=%u seq=%lu cell=%08lX pos=(%.1f, %.1f, %.1f).",
@@ -633,6 +640,7 @@ DWORD WINAPI PeerWorker(void* parameter)
         EnterCriticalSection(&g_remoteSnapshotLock);
         g_hasRemoteSnapshot[index] = false;
         g_remoteSnapshots[index] = PlayerSnapshot{};
+        g_lastConsumedRemoteSequence[index] = 0;
         LeaveCriticalSection(&g_remoteSnapshotLock);
     }
     shutdown(peer, SD_BOTH);
@@ -707,6 +715,7 @@ void KeepConnectionUntilClosed(SOCKET peer)
                     EnterCriticalSection(&g_remoteSnapshotLock);
                     g_hasRemoteSnapshot[index] = false;
                     g_remoteSnapshots[index] = PlayerSnapshot{};
+                    g_lastConsumedRemoteSequence[index] = 0;
                     LeaveCriticalSection(&g_remoteSnapshotLock);
                     Log("Host reported that a remote player disconnected.");
                     continue;
