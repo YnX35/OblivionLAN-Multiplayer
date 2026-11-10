@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - feature/first-xobse-plugin
+      - feature/gameplay-mainloop
     paths:
       - "src/plugin/**"
       - ".github/workflows/build-xobse-plugin.yml"
