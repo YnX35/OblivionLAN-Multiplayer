@@ -286,6 +286,8 @@ DWORD WINAPI PeerWorker(void* parameter)
 
     // Receive client position snapshots on this worker only. Engine calls stay
     // on the xOBSE game thread; this worker only validates wire data.
+    std::uint32_t lastAcceptedSequence = 0;
+    DWORD lastSnapshotLogAt = 0;
     for (;;)
     {
         std::vector<std::uint8_t> payload;
@@ -303,6 +305,7 @@ DWORD WINAPI PeerWorker(void* parameter)
         std::memcpy(&y, &yb, sizeof(y));
         std::memcpy(&z, &zb, sizeof(z));
         if (playerId != assignedPlayerId || sequence == 0 ||
+            sequence <= lastAcceptedSequence ||
             !std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z) ||
             std::fabs(x) > 10000000.0f || std::fabs(y) > 10000000.0f ||
             std::fabs(z) > 10000000.0f)
@@ -310,12 +313,18 @@ DWORD WINAPI PeerWorker(void* parameter)
             Log("Rejected invalid player snapshot.");
             break;
         }
-        char message[160] = {};
-        std::snprintf(message, sizeof(message),
-            "Received player snapshot: player=%u seq=%lu cell=%08lX pos=(%.1f, %.1f, %.1f).",
-            static_cast<unsigned>(playerId), static_cast<unsigned long>(sequence),
-            static_cast<unsigned long>(cellId), x, y, z);
-        Log(message);
+        lastAcceptedSequence = sequence;
+        const DWORD now = GetTickCount();
+        if (now - lastSnapshotLogAt >= 5000)
+        {
+            lastSnapshotLogAt = now;
+            char message[160] = {};
+            std::snprintf(message, sizeof(message),
+                "Receiving player snapshots: player=%u seq=%lu cell=%08lX pos=(%.1f, %.1f, %.1f).",
+                static_cast<unsigned>(playerId), static_cast<unsigned long>(sequence),
+                static_cast<unsigned long>(cellId), x, y, z);
+            Log(message);
+        }
     }
 
     shutdown(peer, SD_BOTH);
