@@ -19,8 +19,8 @@ Une étape ne passe à « validée » qu'avec une preuve reproductible. « Impl�
 - [x] Définir la spécification OLAN v2 (paquets joueur, séquences, limites, autorité hôte) ; spécification seulement, pas encore codée.
 - [ ] Identifier et tester une méthode sûre pour lire l'état du joueur.
 - [x] Implémenter le relais des snapshots clients depuis l'hôte vers les autres clients.
-- [x] Diffuser la position de l'hôte vers les clients (compilation Win32 en attente).
-- [x] Notifier la déconnexion d'un client et nettoyer son instantané distant (compilation Win32 en attente).
+- [x] Diffuser la position de l'hôte vers les clients (compilation GitHub Actions Win32 Release réussie).
+- [x] Notifier la déconnexion d'un client et nettoyer son instantané distant (compilation GitHub Actions Win32 Release réussie).
 - [ ] Synchroniser la présence puis la position de deux joueurs dans une zone de test (transport et transfert vers la boucle principale codés ; rendu d'avatar absent).
 - [ ] Créer un avatar distant sans corrompre les sauvegardes ni les références.
 - [ ] Tester déconnexion, fermeture du jeu, timeout et messages invalides.
@@ -33,21 +33,21 @@ Une étape ne passe à « validée » qu'avec une preuve reproductible. « Impl�
 
 Le plugin lit OblivionLAN.ini dans Data/OBSE/Plugins. Le mode host écoute sur le port TCP configuré et accepte jusqu'à trois connexions. Le mode client se connecte à une IPv4. Le handshake vérifie OLAN version 1. Chaque connexion hôte est gérée par un thread séparé. Aucun thread réseau n'appelle le moteur Oblivion.
 
-Cette étape est implémentée dans le code ; elle doit encore être compilée après la dernière modification et testée dans deux instances réelles d'Oblivion.
+Cette étape est implémentée dans le code et les dernières modifications compilent en Win32 Release. Elle doit encore être testée dans deux instances réelles d'Oblivion.
 
 ## Étape actuelle — protocole gameplay
 
-La spécification [docs/PROTOCOL.md](PROTOCOL.md) fixe les principes du prochain protocole : snapshots joueur, identifiants réseau attribués par l'hôte, files bornées entre réseau et jeu, validation stricte et autorité hôte. Le transport reste TCP au début ; UDP ne sera envisagé qu'après des mesures. Cette spécification n'ajoute pas encore de synchronisation réelle.
+La spécification [docs/PROTOCOL.md](PROTOCOL.md) fixe les principes du prochain protocole : snapshots joueur, identifiants réseau attribués par l'hôte, files bornées entre réseau et jeu, validation stricte et autorité hôte. Le transport reste TCP au début ; UDP ne sera envisagé qu'après des mesures. Le protocole est partiellement implémenté pour les snapshots de position et les notifications de déconnexion ; les autres catégories d'état ne sont pas encore synchronisées.
 
 ## Étape actuelle — boucle principale xOBSE
 
-Le plugin enregistre maintenant une tâche récurrente via `OBSETasks2Interface::EnqueueTaskRemovable`. Cette tâche s'exécute dans la boucle principale du jeu et lit, sans les modifier, la cellule, la référence de base et la position du joueur. Elle écrit un diagnostic toutes les cinq secondes. Ce point d'entrée est implémenté dans le code mais doit encore être compilé puis vérifié dans Oblivion réel. Il ne synchronise pas encore les joueurs.
+Le plugin enregistre maintenant une tâche récurrente via `OBSETasks2Interface::EnqueueTaskRemovable`. Cette tâche s'exécute dans la boucle principale du jeu et lit, sans les modifier, la cellule, la référence de base et la position du joueur. Elle écrit un diagnostic toutes les cinq secondes. Ce point d'entrée est implémenté et compilé en Win32 Release ; son exécution doit encore être vérifiée dans Oblivion réel. Il ne synchronise pas encore les joueurs.
 
 Le projet externe [ObMultiplayerServer](https://github.com/theturrell/ObMultiplayerServer) a été étudié comme référence fonctionnelle pour les catégories d'état (joueur, combat, quêtes, butin) et le relais. Son adaptateur de jeu utilise aussi des adresses mémoire runtime codées en dur et des commandes console expérimentales ; ces parties ne sont pas reprises sans vérification indépendante, car elles risqueraient de casser selon la version ou les sauvegardes.
 
 ## Étape suivante — relais et présence des joueurs
 
-Le client capture un instantané sur la boucle principale et envoie le dernier état environ toutes les 100 ms. L'hôte vérifie l'identifiant attribué, le numéro de séquence et les coordonnées ; les paquets invalides ferment la connexion. L'hôte relaie les positions des clients, diffuse sa propre position et transmet les événements de déconnexion. Les snapshots sont validés puis transmis à la boucle principale via quatre emplacements bornés et coalescés. Ils ne sont pas encore appliqués au moteur et aucun avatar distant n'est affiché. La prochaine étape est une méthode sûre de création et de mise à jour d'avatar. Aucune fonction du moteur n'est appelée depuis un thread Winsock.
+Le client capture un instantané sur la boucle principale et envoie le dernier état environ toutes les 100 ms. L'hôte vérifie l'identifiant attribué, le numéro de séquence et les coordonnées ; les paquets invalides ferment la connexion. L'hôte relaie les positions des clients, diffuse sa propre position et transmet les événements de déconnexion. Les snapshots sont validés puis transmis à la boucle principale via quatre emplacements bornés et coalescés. Ces changements passent la compilation Win32 Release, mais ils ne sont pas encore testés dans deux instances réelles. Ils ne sont pas encore appliqués au moteur et aucun avatar distant n'est affiché. La prochaine étape est une méthode sûre de création et de mise à jour d'avatar. Aucune fonction du moteur n'est appelée depuis un thread Winsock.
 
 Les positions ne suffisent pas à créer un avatar distant : il faudra ensuite identifier une méthode documentée et sûre pour représenter un autre joueur sans corrompre les sauvegardes ni les références du monde.
 
