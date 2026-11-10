@@ -13,6 +13,7 @@ Une étape ne passe à « validée » qu'avec une preuve reproductible. « Impl�
 - [x] Ajouter au plugin une couche TCP optionnelle hôte/client avec configuration INI.
 - [x] Étendre l'hôte pour accepter jusqu'à trois clients distants avec un thread par connexion.
 - [ ] Compiler le dernier changement et inspecter le build.
+- [x] Ajouter un point d'exécution récurrent sur la boucle principale via l'interface xOBSE Tasks2 (capture du joueur en lecture seule, diagnostic).
 - [ ] Tester le handshake depuis deux instances réelles d'Oblivion.
 - [ ] Ajouter une file de messages bornée entre réseau et thread de jeu.
 - [ ] Identifier et tester une méthode sûre pour lire l'état du joueur.
@@ -30,9 +31,15 @@ Le plugin lit OblivionLAN.ini dans Data/OBSE/Plugins. Le mode host écoute sur l
 
 Cette étape est implémentée dans le code ; elle doit encore être compilée après la dernière modification et testée dans deux instances réelles d'Oblivion.
 
+## Étape actuelle — boucle principale xOBSE
+
+Le plugin enregistre maintenant une tâche récurrente via `OBSETasks2Interface::EnqueueTaskRemovable`. Cette tâche s'exécute dans la boucle principale du jeu et lit, sans les modifier, la cellule, la référence de base et la position du joueur. Elle écrit un diagnostic toutes les cinq secondes. Ce point d'entrée est implémenté dans le code mais doit encore être compilé puis vérifié dans Oblivion réel. Il ne synchronise pas encore les joueurs.
+
+Le projet externe [ObMultiplayerServer](https://github.com/theturrell/ObMultiplayerServer) a été étudié comme référence fonctionnelle pour les catégories d'état (joueur, combat, quêtes, butin) et le relais. Son adaptateur de jeu utilise aussi des adresses mémoire runtime codées en dur et des commandes console expérimentales ; ces parties ne sont pas reprises sans vérification indépendante, car elles risqueraient de casser selon la version ou les sauvegardes.
+
 ## Étape suivante — présence et position
 
-Avant d'envoyer une position, identifier dans le SDK/runtime un mécanisme approprié pour obtenir les mises à jour sur le thread de jeu. Les paquets réseau devront être décodés en données simples, puis transférés par une file bornée. Aucune adresse mémoire ou fonction du moteur ne sera appelée directement depuis le thread réseau.
+Capturer un instantané joueur à intervalle borné sur la boucle principale, l'encoder dans le protocole réseau avec des champs explicites, puis le transmettre par le worker réseau. Les instantanés entrants devront passer par une file bornée avant toute application sur la boucle du jeu. Aucune adresse mémoire ou fonction du moteur ne sera appelée directement depuis le thread réseau.
 
 Les positions ne suffisent pas à créer un avatar distant : il faudra ensuite identifier une méthode documentée et sûre pour représenter un autre joueur sans corrompre les sauvegardes ni les références du monde.
 
