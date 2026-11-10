@@ -18,7 +18,9 @@ Une étape ne passe à « validée » qu'avec une preuve reproductible. « Impl�
 - [x] Ajouter un instantané joueur partagé de manière thread-safe entre la boucle de jeu et le worker client (dernier état coalescé, pas de file non bornée).
 - [x] Définir la spécification OLAN v2 (paquets joueur, séquences, limites, autorité hôte) ; spécification seulement, pas encore codée.
 - [ ] Identifier et tester une méthode sûre pour lire l'état du joueur.
-- [x] Implémenter le relais des snapshots clients depuis l'hôte vers les autres clients (compilation Win32 à confirmer).
+- [x] Implémenter le relais des snapshots clients depuis l'hôte vers les autres clients.
+- [x] Diffuser la position de l'hôte vers les clients (compilation Win32 en attente).
+- [x] Notifier la déconnexion d'un client et nettoyer son instantané distant (compilation Win32 en attente).
 - [ ] Synchroniser la présence puis la position de deux joueurs dans une zone de test (transport et transfert vers la boucle principale codés ; rendu d'avatar absent).
 - [ ] Créer un avatar distant sans corrompre les sauvegardes ni les références.
 - [ ] Tester déconnexion, fermeture du jeu, timeout et messages invalides.
@@ -45,7 +47,7 @@ Le projet externe [ObMultiplayerServer](https://github.com/theturrell/ObMultipla
 
 ## Étape suivante — relais et présence des joueurs
 
-Le client capture un instantané sur la boucle principale et envoie le dernier état environ toutes les 100 ms. L'hôte vérifie l'identifiant attribué, le numéro de séquence et les coordonnées ; les paquets invalides ferment la connexion. L'hôte relaie désormais les positions reçues aux autres clients. Les snapshots sont validés puis transmis à la boucle principale via trois emplacements bornés et coalescés. Ils ne sont pas encore appliqués au moteur et aucun avatar distant n'est affiché. La prochaine étape est une file entrante bornée puis une méthode sûre de création d'avatar. Aucune fonction du moteur n'est appelée depuis un thread Winsock.
+Le client capture un instantané sur la boucle principale et envoie le dernier état environ toutes les 100 ms. L'hôte vérifie l'identifiant attribué, le numéro de séquence et les coordonnées ; les paquets invalides ferment la connexion. L'hôte relaie les positions des clients, diffuse sa propre position et transmet les événements de déconnexion. Les snapshots sont validés puis transmis à la boucle principale via quatre emplacements bornés et coalescés. Ils ne sont pas encore appliqués au moteur et aucun avatar distant n'est affiché. La prochaine étape est une méthode sûre de création et de mise à jour d'avatar. Aucune fonction du moteur n'est appelée depuis un thread Winsock.
 
 Les positions ne suffisent pas à créer un avatar distant : il faudra ensuite identifier une méthode documentée et sûre pour représenter un autre joueur sans corrompre les sauvegardes ni les références du monde.
 
