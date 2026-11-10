@@ -3,6 +3,7 @@
 #include <ws2tcpip.h>
 #include <windows.h>
 #include "obse/PluginAPI.h"
+#include "obse/GameObjects.h"
 
 #include <array>
 #include <cstdint>
@@ -28,6 +29,9 @@ constexpr char kMagic[4] = {'O', 'L', 'A', 'N'};
 
 std::string g_pluginDirectory;
 std::string g_logPath;
+OBSETasks2Interface* g_tasks2 = nullptr;
+Task<bool>* g_gameThreadTask = nullptr;
+DWORD g_lastPlayerSnapshotLog = 0;
 
 void Log(const char* message)
 {
@@ -54,6 +58,30 @@ void Log(const char* message)
         WriteFile(file, line, static_cast<DWORD>(length), &written, nullptr);
     }
     CloseHandle(file);
+}
+
+bool GameThreadPump()
+{
+    // xOBSE invokes this removable task from its main game loop.
+    // Returning false keeps it scheduled for the next loop iteration.
+    PlayerCharacter* player = (g_thePlayer != nullptr) ? *g_thePlayer : nullptr;
+    if (player == nullptr || player->parentCell == nullptr)
+        return false;
+
+    const DWORD now = GetTickCount();
+    if (now - g_lastPlayerSnapshotLog >= 5000)
+    {
+        g_lastPlayerSnapshotLog = now;
+        char message[256] = {};
+        const unsigned long baseFormId = player->baseForm != nullptr
+            ? static_cast<unsigned long>(player->baseForm->refID) : 0UL;
+        std::snprintf(message, sizeof(message),
+            "Game-thread snapshot available: cell=%08lX base=%08lX pos=(%.1f, %.1f, %.1f).",
+            static_cast<unsigned long>(player->parentCell->refID), baseFormId,
+            player->posX, player->posY, player->posZ);
+        Log(message);
+    }
+    return false;
 }
 
 bool GetModulePaths()
@@ -473,6 +501,24 @@ bool OBSEPlugin_Load(const OBSEInterface* obse)
         return false;
 
     WriteLoadLog();
+
+    // Use the SDK's supported main-loop task interface. Game state must only
+    // be sampled/applied here, never from the socket worker threads.
+    g_tasks2 = static_cast<OBSETasks2Interface*>(
+        obse->QueryInterface(kInterface_Tasks2));
+    if (g_tasks2 != nullptr &&
+        g_tasks2->version >= OBSETasks2Interface::kVersion &&
+        g_tasks2->EnqueueTaskRemovable != nullptr)
+    {
+        g_gameThreadTask = g_tasks2->EnqueueTaskRemovable(GameThreadPump);
+        Log(g_gameThreadTask != nullptr
+            ? "xOBSE main-loop gameplay pump registered."
+            : "Could not register xOBSE main-loop gameplay pump.");
+    }
+    else
+    {
+        Log("Gameplay pump unavailable: xOBSE Tasks2 interface is missing or too old.");
+    }
 
     HANDLE thread = CreateThread(nullptr, 0, NetworkWorker, nullptr, 0, nullptr);
     if (thread == nullptr)
