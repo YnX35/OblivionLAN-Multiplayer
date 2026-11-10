@@ -10,11 +10,12 @@ Projet expérimental visant à créer un mode multijoueur LAN pour The Elder Scr
 - Le plugin intégré démarre un hôte TCP ou un client et effectue un handshake OLAN version 1.
 - L'hôte peut accepter jusqu'à trois clients distants (quatre joueurs au total), avec un thread indépendant par connexion.
 - Le dernier changement a été compilé avec succès en Win32 Release par GitHub Actions (build technique uniquement, pas un test en jeu).
-- Une spécification OLAN v2 décrit les futurs paquets de présence et de position ; elle n'est pas encore implémentée.
+- Le transport des snapshots de position est implémenté dans le plugin ; les tests en jeu à deux PC restent à faire.
+- Un prototype d'avatar distant same-cell est dans le code : création via `PlaceAtMe`, résolution par FormID et déplacement sur la boucle principale. Il n'est pas encore validé en jeu ni sur des sauvegardes.
 
 ## Limite majeure — transparence
 
-Ce dépôt ne contient pas encore un véritable multijoueur jouable. La connexion réseau confirme seulement que les jeux peuvent établir une session TCP. Aucun avatar distant, mouvement, combat, créature, objet, inventaire ou quête n'est synchronisé. Le fait que deux jeux affichent « handshake successful » ne signifie pas qu'ils partagent le monde.
+Ce dépôt ne contient pas encore un véritable multijoueur jouable. La connexion réseau et le relais des positions sont implémentés, mais pas encore validés dans deux instances réelles. Le prototype d'avatar est compilé séparément uniquement après validation du build correspondant ; son affichage et son cycle de vie restent à tester. Aucun combat, créature, objet, inventaire ou quête n'est synchronisé. Le fait que deux jeux affichent « handshake successful » ne signifie pas qu'ils partagent le monde.
 
 ## Objectif final
 
