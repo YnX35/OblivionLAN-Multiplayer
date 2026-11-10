@@ -12,10 +12,11 @@ Une étape ne passe à « validée » qu'avec une preuve reproductible. « Impl�
 - [x] Handshake réseau autonome entre deux PC sur le LAN.
 - [x] Ajouter au plugin une couche TCP optionnelle hôte/client avec configuration INI.
 - [x] Étendre l'hôte pour accepter jusqu'à trois clients distants avec un thread par connexion.
-- [ ] Compiler le dernier changement et inspecter le build.
+- [x] Compiler le dernier changement et inspecter le build (GitHub Actions Win32 Release : succès).
 - [x] Ajouter un point d'exécution récurrent sur la boucle principale via l'interface xOBSE Tasks2 (capture du joueur en lecture seule, diagnostic).
 - [ ] Tester le handshake depuis deux instances réelles d'Oblivion.
 - [ ] Ajouter une file de messages bornée entre réseau et thread de jeu.
+- [x] Définir la spécification OLAN v2 (paquets joueur, séquences, limites, autorité hôte) ; spécification seulement, pas encore codée.
 - [ ] Identifier et tester une méthode sûre pour lire l'état du joueur.
 - [ ] Synchroniser la présence puis la position de deux joueurs dans une zone de test.
 - [ ] Créer un avatar distant sans corrompre les sauvegardes ni les références.
@@ -30,6 +31,10 @@ Une étape ne passe à « validée » qu'avec une preuve reproductible. « Impl�
 Le plugin lit OblivionLAN.ini dans Data/OBSE/Plugins. Le mode host écoute sur le port TCP configuré et accepte jusqu'à trois connexions. Le mode client se connecte à une IPv4. Le handshake vérifie OLAN version 1. Chaque connexion hôte est gérée par un thread séparé. Aucun thread réseau n'appelle le moteur Oblivion.
 
 Cette étape est implémentée dans le code ; elle doit encore être compilée après la dernière modification et testée dans deux instances réelles d'Oblivion.
+
+## Étape actuelle — protocole gameplay
+
+La spécification [docs/PROTOCOL.md](PROTOCOL.md) fixe les principes du prochain protocole : snapshots joueur, identifiants réseau attribués par l'hôte, files bornées entre réseau et jeu, validation stricte et autorité hôte. Le transport reste TCP au début ; UDP ne sera envisagé qu'après des mesures. Cette spécification n'ajoute pas encore de synchronisation réelle.
 
 ## Étape actuelle — boucle principale xOBSE
 
