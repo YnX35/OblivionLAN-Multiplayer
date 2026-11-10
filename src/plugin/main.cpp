@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cmath>
 #include <cstring>
 #include <new>
 #include <string>
@@ -21,10 +22,27 @@ namespace
 constexpr std::uint16_t kProtocolVersion = 1;
 constexpr std::uint16_t kHello = 1;
 constexpr std::uint16_t kWelcome = 2;
+constexpr std::uint16_t kPlayerSnapshot = 3;
 constexpr std::uint32_t kMaxPayload = 256;
 constexpr unsigned short kDefaultPort = 47621;
 constexpr LONG kMaxRemotePlayers = 3; // Up to four players including the host.
 volatile LONG g_connectedClients = 0;
+volatile LONG g_nextPlayerId = 1;
+volatile LONG g_localNetworkPlayerId = 0;
+CRITICAL_SECTION g_snapshotLock{};
+bool g_snapshotLockReady = false;
+struct PlayerSnapshot
+{
+    std::uint16_t playerId = 0;
+    std::uint32_t sequence = 0;
+    std::uint32_t cellId = 0;
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
+};
+PlayerSnapshot g_latestSnapshot{};
+bool g_hasSnapshot = false;
+DWORD g_lastSnapshotSequence = 0;
 constexpr char kMagic[4] = {'O', 'L', 'A', 'N'};
 
 std::string g_pluginDirectory;
@@ -67,6 +85,22 @@ bool GameThreadPump()
     PlayerCharacter* player = (g_thePlayer != nullptr) ? *g_thePlayer : nullptr;
     if (player == nullptr || player->parentCell == nullptr)
         return false;
+
+    if (g_snapshotLockReady)
+    {
+        PlayerSnapshot snapshot{};
+        snapshot.playerId = static_cast<std::uint16_t>(
+            InterlockedCompareExchange(&g_localNetworkPlayerId, 0, 0));
+        snapshot.sequence = ++g_lastSnapshotSequence;
+        snapshot.cellId = player->parentCell->refID;
+        snapshot.x = player->posX;
+        snapshot.y = player->posY;
+        snapshot.z = player->posZ;
+        EnterCriticalSection(&g_snapshotLock);
+        g_latestSnapshot = snapshot;
+        g_hasSnapshot = true;
+        LeaveCriticalSection(&g_snapshotLock);
+    }
 
     const DWORD now = GetTickCount();
     if (now - g_lastPlayerSnapshotLog >= 5000)
@@ -209,7 +243,7 @@ bool sendHello(SOCKET socket)
     return send_frame(socket, kHello, payload);
 }
 
-bool acceptHello(SOCKET socket)
+bool acceptHello(SOCKET socket, std::uint16_t& assignedPlayerId)
 {
     std::vector<std::uint8_t> payload;
     if (!recv_frame(socket, kHello, payload) ||
@@ -225,13 +259,19 @@ bool acceptHello(SOCKET socket)
     const DWORD seed = GetTickCount() ^ GetCurrentProcessId();
     for (std::size_t i = 0; i < session.size(); ++i)
         session[i] = static_cast<std::uint8_t>((seed >> ((i % 4) * 8)) ^ (i * 37));
+    assignedPlayerId = static_cast<std::uint16_t>(
+        InterlockedIncrement(&g_nextPlayerId));
+    if (assignedPlayerId == 0)
+        return false;
     std::vector<std::uint8_t> welcome(session.begin(), session.end());
+    put_u16(welcome, assignedPlayerId);
     return send_frame(socket, kWelcome, welcome);
 }
 
 struct PeerContext
 {
     SOCKET socket;
+    std::uint16_t playerId;
 };
 
 DWORD WINAPI PeerWorker(void* parameter)
@@ -243,13 +283,38 @@ DWORD WINAPI PeerWorker(void* parameter)
     const SOCKET peer = context->socket;
     delete context;
 
-    // Gameplay packets are not implemented yet. Wait for a clean peer shutdown.
-    char ignored = 0;
+    // Receive client position snapshots on this worker only. Engine calls stay
+    // on the xOBSE game thread; this worker only validates wire data.
     for (;;)
     {
-        const int result = recv(peer, &ignored, 1, 0);
-        if (result <= 0)
+        std::vector<std::uint8_t> payload;
+        if (!recv_frame(peer, kPlayerSnapshot, payload) || payload.size() != 22)
             break;
+
+        const std::uint16_t playerId = read_u16(payload.data());
+        const std::uint32_t sequence = read_u32(payload.data() + 2);
+        const std::uint32_t cellId = read_u32(payload.data() + 6);
+        std::uint32_t xb = read_u32(payload.data() + 10);
+        std::uint32_t yb = read_u32(payload.data() + 14);
+        std::uint32_t zb = read_u32(payload.data() + 18);
+        float x = 0.0f, y = 0.0f, z = 0.0f;
+        std::memcpy(&x, &xb, sizeof(x));
+        std::memcpy(&y, &yb, sizeof(y));
+        std::memcpy(&z, &zb, sizeof(z));
+        if (playerId != context->playerId || sequence == 0 ||
+            !std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z) ||
+            std::fabs(x) > 10000000.0f || std::fabs(y) > 10000000.0f ||
+            std::fabs(z) > 10000000.0f)
+        {
+            Log("Rejected invalid player snapshot.");
+            break;
+        }
+        char message[160] = {};
+        std::snprintf(message, sizeof(message),
+            "Received player snapshot: player=%u seq=%lu cell=%08lX pos=(%.1f, %.1f, %.1f).",
+            static_cast<unsigned>(playerId), static_cast<unsigned long>(sequence),
+            static_cast<unsigned long>(cellId), x, y, z);
+        Log(message);
     }
 
     shutdown(peer, SD_BOTH);
@@ -261,14 +326,58 @@ DWORD WINAPI PeerWorker(void* parameter)
 
 void KeepConnectionUntilClosed(SOCKET peer)
 {
-    // Client-side connection lifecycle: this runs on the network worker thread,
-    // never on Oblivion's main/game thread.
-    char ignored = 0;
+    // Client-side transport loop. It sends the newest game-thread snapshot;
+    // stale positions are coalesced instead of building an unbounded backlog.
+    DWORD lastSentAt = 0;
+    std::uint32_t lastSentSequence = 0;
     for (;;)
     {
-        const int result = recv(peer, &ignored, 1, 0);
-        if (result <= 0)
+        const DWORD now = GetTickCount();
+        if (now - lastSentAt >= 100 && g_snapshotLockReady)
+        {
+            PlayerSnapshot snapshot{};
+            bool available = false;
+            EnterCriticalSection(&g_snapshotLock);
+            if (g_hasSnapshot)
+            {
+                snapshot = g_latestSnapshot;
+                available = true;
+            }
+            LeaveCriticalSection(&g_snapshotLock);
+
+            if (available && snapshot.playerId != 0 &&
+                snapshot.sequence != lastSentSequence)
+            {
+                std::vector<std::uint8_t> payload;
+                payload.reserve(22);
+                put_u16(payload, snapshot.playerId);
+                put_u32(payload, snapshot.sequence);
+                put_u32(payload, snapshot.cellId);
+                std::uint32_t bits = 0;
+                std::memcpy(&bits, &snapshot.x, sizeof(bits)); put_u32(payload, bits);
+                std::memcpy(&bits, &snapshot.y, sizeof(bits)); put_u32(payload, bits);
+                std::memcpy(&bits, &snapshot.z, sizeof(bits)); put_u32(payload, bits);
+                if (!send_frame(peer, kPlayerSnapshot, payload))
+                    break;
+                lastSentSequence = snapshot.sequence;
+                lastSentAt = now;
+            }
+        }
+
+        fd_set readSet;
+        FD_ZERO(&readSet);
+        FD_SET(peer, &readSet);
+        timeval wait{0, 50000};
+        const int ready = select(0, &readSet, nullptr, nullptr, &wait);
+        if (ready == SOCKET_ERROR)
             break;
+        if (ready > 0)
+        {
+            char probe = 0;
+            const int received = recv(peer, &probe, 1, MSG_PEEK);
+            if (received <= 0)
+                break;
+        }
     }
     shutdown(peer, SD_BOTH);
     closesocket(peer);
@@ -364,7 +473,8 @@ DWORD WINAPI NetworkWorker(void*)
                 reinterpret_cast<const char*>(&handshakeTimeoutMs), sizeof(handshakeTimeoutMs));
             setsockopt(peer, SOL_SOCKET, SO_SNDTIMEO,
                 reinterpret_cast<const char*>(&handshakeTimeoutMs), sizeof(handshakeTimeoutMs));
-            if (!acceptHello(peer))
+            std::uint16_t assignedPlayerId = 0;
+            if (!acceptHello(peer, assignedPlayerId))
             {
                 Log("Network warning: rejected client with invalid or timed-out handshake.");
                 shutdown(peer, SD_BOTH);
@@ -378,7 +488,7 @@ DWORD WINAPI NetworkWorker(void*)
             setsockopt(peer, SOL_SOCKET, SO_SNDTIMEO,
                 reinterpret_cast<const char*>(&handshakeTimeoutMs), sizeof(handshakeTimeoutMs));
 
-            PeerContext* context = new (std::nothrow) PeerContext{peer};
+            PeerContext* context = new (std::nothrow) PeerContext{peer, assignedPlayerId};
             if (context == nullptr)
             {
                 Log("Network error: not enough memory for peer context.");
@@ -438,7 +548,7 @@ DWORD WINAPI NetworkWorker(void*)
         }
 
         std::vector<std::uint8_t> welcome;
-        if (!sendHello(peer) || !recv_frame(peer, kWelcome, welcome) || welcome.size() != 16)
+        if (!sendHello(peer) || !recv_frame(peer, kWelcome, welcome) || welcome.size() != 18)
         {
             Log("Network error: host handshake failed or protocol version differs.");
             shutdown(peer, SD_BOTH);
@@ -446,6 +556,16 @@ DWORD WINAPI NetworkWorker(void*)
             WSACleanup();
             return 0;
         }
+        const std::uint16_t assignedPlayerId = read_u16(welcome.data() + 16);
+        if (assignedPlayerId == 0)
+        {
+            Log("Network error: host assigned an invalid player ID.");
+            shutdown(peer, SD_BOTH);
+            closesocket(peer);
+            WSACleanup();
+            return 0;
+        }
+        InterlockedExchange(&g_localNetworkPlayerId, assignedPlayerId);
         timeoutMs = 0;
         setsockopt(peer, SOL_SOCKET, SO_RCVTIMEO,
             reinterpret_cast<const char*>(&timeoutMs), sizeof(timeoutMs));
@@ -501,6 +621,8 @@ bool OBSEPlugin_Load(const OBSEInterface* obse)
         return false;
 
     WriteLoadLog();
+    InitializeCriticalSection(&g_snapshotLock);
+    g_snapshotLockReady = true;
 
     // Use the SDK's supported main-loop task interface. Game state must only
     // be sampled/applied here, never from the socket worker threads.
