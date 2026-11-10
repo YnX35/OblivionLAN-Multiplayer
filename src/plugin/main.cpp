@@ -385,6 +385,20 @@ void UnregisterHostPeer(SOCKET peer)
     LeaveCriticalSection(&g_peerLock);
 }
 
+// Called only while g_peerLock is held. The peer worker remains the
+// sole owner responsible for closing the socket handle after shutdown wakes
+// its receive loop, avoiding a double-close/reused-handle race.
+void MarkHostPeerFailedLocked(std::size_t index, const char* message)
+{
+    const SOCKET failed = g_hostPeers[index];
+    if (failed == INVALID_SOCKET)
+        return;
+    Log(message);
+    shutdown(failed, SD_BOTH);
+    g_hostPeers[index] = INVALID_SOCKET;
+    g_hostPeerIds[index] = 0;
+}
+
 void RelayPlayerLeave(std::uint16_t playerId, SOCKET source)
 {
     if (!g_peerLockReady || playerId < 2 || playerId > 4)
@@ -397,7 +411,7 @@ void RelayPlayerLeave(std::uint16_t playerId, SOCKET source)
         const SOCKET destination = g_hostPeers[i];
         if (destination != INVALID_SOCKET && destination != source &&
             !send_frame(destination, kPlayerLeave, payload))
-            Log("Warning: failed to relay a player-leave event.");
+            MarkHostPeerFailedLocked(i, "Warning: dropped a peer after player-leave send failure.");
     }
     LeaveCriticalSection(&g_peerLock);
 }
@@ -415,7 +429,7 @@ void RelaySnapshotToOtherPeers(SOCKET source, const std::vector<std::uint8_t>& p
         if (destination == INVALID_SOCKET || destination == source)
             continue;
         if (!send_frame(destination, kPlayerSnapshot, payload))
-            Log("Warning: failed to relay a player snapshot to a peer.");
+            MarkHostPeerFailedLocked(i, "Warning: dropped a peer after snapshot relay send failure.");
     }
     LeaveCriticalSection(&g_peerLock);
 }
@@ -460,7 +474,7 @@ void BroadcastHostSnapshot()
                         const SOCKET destination = g_hostPeers[i];
                         if (destination != INVALID_SOCKET &&
                             !send_frame(destination, kPlayerSnapshot, payload))
-                            Log("Warning: failed to send host snapshot to a client.");
+                            MarkHostPeerFailedLocked(i, "Warning: dropped a peer after host snapshot send failure.");
                     }
                     LeaveCriticalSection(&g_peerLock);
                 }
@@ -787,8 +801,11 @@ DWORD WINAPI NetworkWorker(void*)
             handshakeTimeoutMs = 0;
             setsockopt(peer, SOL_SOCKET, SO_RCVTIMEO,
                 reinterpret_cast<const char*>(&handshakeTimeoutMs), sizeof(handshakeTimeoutMs));
+            // Bound blocking writes while the host serializes frames under
+            // g_peerLock. A failed/partial frame causes that peer to be shut down.
+            const DWORD peerSendTimeoutMs = 1000;
             setsockopt(peer, SOL_SOCKET, SO_SNDTIMEO,
-                reinterpret_cast<const char*>(&handshakeTimeoutMs), sizeof(handshakeTimeoutMs));
+                reinterpret_cast<const char*>(&peerSendTimeoutMs), sizeof(peerSendTimeoutMs));
 
             if (!RegisterHostPeer(peer, assignedPlayerId))
             {
