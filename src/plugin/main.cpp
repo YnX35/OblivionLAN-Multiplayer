@@ -390,17 +390,50 @@ bool RegisterHostPeer(SOCKET peer, std::uint16_t playerId)
             std::memcpy(&bits, &snapshot.y, sizeof(bits)); put_u32(payload, bits);
             std::memcpy(&bits, &snapshot.z, sizeof(bits)); put_u32(payload, bits);
             if (!send_frame(peer, kPlayerSnapshot, payload))
-            {
-                for (std::size_t i = 0; i < g_hostPeers.size(); ++i)
-                    if (g_hostPeers[i] == peer)
-                    {
-                        g_hostPeers[i] = INVALID_SOCKET;
-                        g_hostPeerIds[i] = 0;
-                        break;
-                    }
                 registered = false;
+        }
+
+        // Also seed the joining client with the latest snapshots already
+        // received from other clients. The peer lock serializes these frames
+        // with normal relay traffic and disconnect notifications.
+        if (registered && g_remoteSnapshotLockReady)
+        {
+            std::array<PlayerSnapshot, 4> existing{};
+            std::array<bool, 4> present{{false, false, false, false}};
+            EnterCriticalSection(&g_remoteSnapshotLock);
+            existing = g_remoteSnapshots;
+            present = g_hasRemoteSnapshot;
+            LeaveCriticalSection(&g_remoteSnapshotLock);
+
+            for (std::size_t i = 1; i < existing.size() && registered; ++i)
+            {
+                if (!present[i])
+                    continue;
+                const PlayerSnapshot& remote = existing[i];
+                std::vector<std::uint8_t> remotePayload;
+                remotePayload.reserve(22);
+                put_u16(remotePayload, remote.playerId);
+                put_u32(remotePayload, remote.sequence);
+                put_u32(remotePayload, remote.cellId);
+                std::uint32_t remoteBits = 0;
+                std::memcpy(&remoteBits, &remote.x, sizeof(remoteBits)); put_u32(remotePayload, remoteBits);
+                std::memcpy(&remoteBits, &remote.y, sizeof(remoteBits)); put_u32(remotePayload, remoteBits);
+                std::memcpy(&remoteBits, &remote.z, sizeof(remoteBits)); put_u32(remotePayload, remoteBits);
+                if (!send_frame(peer, kPlayerSnapshot, remotePayload))
+                    registered = false;
             }
         }
+    }
+
+    if (!registered)
+    {
+        for (std::size_t i = 0; i < g_hostPeers.size(); ++i)
+            if (g_hostPeers[i] == peer)
+            {
+                g_hostPeers[i] = INVALID_SOCKET;
+                g_hostPeerIds[i] = 0;
+                break;
+            }
     }
     LeaveCriticalSection(&g_peerLock);
     return registered;
