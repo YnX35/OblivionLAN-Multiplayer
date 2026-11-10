@@ -16,6 +16,7 @@ Une étape ne passe à « validée » qu'avec une preuve reproductible. « Impl�
 - [x] Ajouter un point d'exécution récurrent sur la boucle principale via l'interface xOBSE Tasks2 (capture du joueur en lecture seule, diagnostic).
 - [ ] Tester le handshake depuis deux instances réelles d'Oblivion.
 - [x] Ajouter un instantané joueur partagé de manière thread-safe entre la boucle de jeu et le worker client (dernier état coalescé, pas de file non bornée).
+- [x] Conserver le dernier instantané de chaque joueur distant pour les arrivées tardives et éviter de retraiter une même séquence ; réinitialiser l'état à la déconnexion (compilation de la correction en attente).
 - [x] Définir la spécification OLAN v2 (paquets joueur, séquences, limites, autorité hôte) ; spécification seulement, pas encore codée.
 - [ ] Identifier et tester une méthode sûre pour lire l'état du joueur.
 - [x] Implémenter le relais des snapshots clients depuis l'hôte vers les autres clients.
