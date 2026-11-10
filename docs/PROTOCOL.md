@@ -4,7 +4,7 @@
 
 Ce document définit la prochaine évolution du protocole du projet pour **Oblivion classique 32 bits (2006)**. Il ne décrit pas OB:MP de ReadyM comme une dépendance : le projet ReadyM cible Oblivion Remastered et son environnement technique est différent.
 
-La version actuellement intégrée au plugin utilise encore l'en-tête **OLAN v1**. Elle effectue le handshake TCP et transporte un message `PLAYER_SNAPSHOT` du client vers l'hôte. L'hôte valide ces paquets puis les relaie aux autres clients connectés. Les clients valident les instantanés relayés et les journalisent ; ils ne les appliquent pas encore au moteur et aucun avatar distant n'est créé. La spécification v2 ci-dessous reste une cible future.
+La version actuellement intégrée au plugin utilise encore l'en-tête **OLAN v1**. Elle effectue le handshake TCP et transporte un message `PLAYER_SNAPSHOT` du client vers l'hôte. L'hôte valide ces paquets puis les relaie aux autres clients connectés. Les clients valident les instantanés relayés et les déposent dans un emplacement borné par joueur, consommé par la boucle principale xOBSE ; aucun changement n'est encore appliqué au moteur et aucun avatar distant n'est créé. La spécification v2 ci-dessous reste une cible future.
 
 ## Transport
 
@@ -102,6 +102,7 @@ Le flag Persistent ne suffit pas à lui seul à rendre un objet synchronisable. 
 - xOBSE Tasks2 : capture périodique de la position locale et dépôt dans un instantané partagé entre threads.
 - Hôte : validation de l'identifiant joueur, de la séquence, des coordonnées finies et de leur plage ; aucune application au moteur.
 - Client : envoi du dernier instantané environ toutes les 100 ms ; les anciennes positions sont coalescées.
+- Hôte et client : transfert du dernier instantané distant vers la boucle principale via trois emplacements bornés (un par joueur distant) ; les données sont lues/loguées, pas encore appliquées au moteur.
 - Relais hôte → autres clients : implémenté dans le transport TCP ; réception et validation côté client également intégrées, sans application au moteur.
 - OLAN v2 : spécification uniquement, pas encore implémentée.
 - Avatar distant : pas encore implémenté.
