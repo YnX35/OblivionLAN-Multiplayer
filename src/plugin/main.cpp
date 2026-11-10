@@ -138,24 +138,24 @@ bool GameThreadPump()
     if (g_remoteSnapshotLockReady)
     {
         std::array<PlayerSnapshot, 4> pending{};
-        std::array<bool, 4> changed{{false, false, false, false}};
+        std::array<bool, 4> present{{false, false, false, false}};
         EnterCriticalSection(&g_remoteSnapshotLock);
         pending = g_remoteSnapshots;
-        for (std::size_t i = 0; i < pending.size(); ++i)
-        {
-            if (!g_hasRemoteSnapshot[i])
-                g_lastConsumedRemoteSequence[i] = 0;
-            else if (pending[i].sequence != g_lastConsumedRemoteSequence[i])
-            {
-                changed[i] = true;
-                g_lastConsumedRemoteSequence[i] = pending[i].sequence;
-            }
-        }
+        present = g_hasRemoteSnapshot;
         LeaveCriticalSection(&g_remoteSnapshotLock);
+
         for (std::size_t i = 0; i < pending.size(); ++i)
         {
-            if (!changed[i])
+            if (!present[i])
+            {
+                HideRemoteAvatar(g_remoteAvatars[i]);
+                g_lastConsumedRemoteSequence[i] = 0;
                 continue;
+            }
+            if (pending[i].sequence == g_lastConsumedRemoteSequence[i])
+                continue;
+
+            g_lastConsumedRemoteSequence[i] = pending[i].sequence;
             char message[160] = {};
             std::snprintf(message, sizeof(message),
                 "Game-thread received remote snapshot: player=%u seq=%lu cell=%08lX pos=(%.1f, %.1f, %.1f).",
@@ -164,6 +164,7 @@ bool GameThreadPump()
                 static_cast<unsigned long>(pending[i].cellId),
                 pending[i].x, pending[i].y, pending[i].z);
             Log(message);
+            ApplyRemoteAvatar(i, pending[i], player);
         }
     }
     return false;
