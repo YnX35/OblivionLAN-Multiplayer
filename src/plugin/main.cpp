@@ -4,6 +4,7 @@
 #include <windows.h>
 #include "obse/PluginAPI.h"
 #include "obse/GameObjects.h"
+#include "obse/GameAPI.h"
 
 #include <array>
 #include <cstdint>
@@ -52,7 +53,7 @@ std::array<bool, 4> g_hasRemoteSnapshot{{false, false, false, false}};
 std::array<std::uint32_t, 4> g_lastConsumedRemoteSequence{{0, 0, 0, 0}};
 struct RemoteAvatar
 {
-    TESObjectREFR* reference = nullptr;
+    std::uint32_t referenceId = 0;
     std::uint32_t cellId = 0;
     bool visible = false;
     bool spawnAttempted = false;
@@ -229,8 +230,11 @@ void SetRemoteAvatarPosition(TESObjectREFR* reference, const PlayerSnapshot& sna
 
 void HideRemoteAvatar(RemoteAvatar& avatar)
 {
-    if (avatar.reference != nullptr && avatar.visible)
-        RunGameScript("Disable", avatar.reference);
+    TESObjectREFR* reference = avatar.referenceId != 0
+        ? OBLIVION_CAST(LookupFormByID(avatar.referenceId), TESForm, TESObjectREFR)
+        : nullptr;
+    if (reference != nullptr && avatar.visible)
+        RunGameScript("Disable", reference);
     avatar.visible = false;
 }
 
@@ -251,20 +255,30 @@ void ApplyRemoteAvatar(
         return; // First prototype is deliberately same-cell only.
     }
 
-    if (avatar.reference != nullptr)
+    TESObjectREFR* existing = avatar.referenceId != 0
+        ? OBLIVION_CAST(LookupFormByID(avatar.referenceId), TESForm, TESObjectREFR)
+        : nullptr;
+    if (avatar.referenceId != 0 && existing == nullptr)
     {
-        if (avatar.reference->parentCell != localPlayer->parentCell)
+        avatar.referenceId = 0;
+        avatar.cellId = 0;
+        avatar.visible = false;
+        avatar.spawnAttempted = false;
+    }
+    if (existing != nullptr)
+    {
+        if (existing->parentCell != localPlayer->parentCell)
         {
             HideRemoteAvatar(avatar);
             return; // Never create repeated references while crossing cells.
         }
         if (!avatar.visible)
         {
-            if (!RunGameScript("Enable", avatar.reference))
+            if (!RunGameScript("Enable", existing))
                 return;
             avatar.visible = true;
         }
-        SetRemoteAvatarPosition(avatar.reference, snapshot);
+        SetRemoteAvatarPosition(existing, snapshot);
         return;
     }
 
@@ -297,7 +311,7 @@ void ApplyRemoteAvatar(
         return;
     }
 
-    avatar.reference = spawned;
+    avatar.referenceId = spawned->refID;
     avatar.cellId = localCellId;
     RunGameScript("SetGhost 1", spawned);
     RunGameScript("SetRestrained 1", spawned);
