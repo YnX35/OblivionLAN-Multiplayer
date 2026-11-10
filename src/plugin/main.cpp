@@ -327,7 +327,7 @@ DWORD WINAPI NetworkWorker(void*)
         address.sin_port = htons(port);
 
         if (bind(listener, reinterpret_cast<sockaddr*>(&address), sizeof(address)) == SOCKET_ERROR ||
-            listen(listener, 1) == SOCKET_ERROR)
+            listen(listener, kMaxRemotePlayers) == SOCKET_ERROR)
         {
             Log("Network error: host bind/listen failed. Check port and firewall.");
             closesocket(listener);
