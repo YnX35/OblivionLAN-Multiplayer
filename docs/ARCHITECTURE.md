@@ -1,6 +1,6 @@
 # Architecture proposée et état actuel
 
-Cette architecture reste la cible globale. Une première tranche est déjà implémentée : plugin xOBSE Win32, transport TCP hôte/client, relais d'instantanés de position et tâche xOBSE Tasks2. Ces fonctions compilent, mais leur fonctionnement dans deux instances réelles d'Oblivion n'est pas encore validé. Aucun avatar distant ni état de gameplay n'est encore appliqué au moteur.
+Cette architecture reste la cible globale. Une première tranche est déjà implémentée : plugin xOBSE Win32, transport TCP hôte/client, relais d'instantanés de position et tâche xOBSE Tasks2. Ces fonctions compilent, mais leur fonctionnement dans deux instances réelles d'Oblivion n'est pas encore validé. Un prototype d'avatar distant same-cell est présent et compilé ; son apparition, son déplacement réel et son cycle de vie en sauvegarde restent à valider. Aucun combat ni état de monde partagé n'est encore appliqué au moteur.
 
 ## 1. Vue d'ensemble
 
@@ -45,7 +45,7 @@ Les files doivent être bornées. Une surcharge produit une erreur contrôlée o
 
 ## 3.1 Interface de commandes xOBSE
 
-Le plugin interroge désormais l'interface `OBSEConsoleInterface` et vérifie sa version ainsi que le pointeur `RunScriptLine2`. Cette interface documentée permet d'exécuter une ligne de script avec une référence appelante. Toute utilisation doit rester sur la boucle principale du jeu ; aucun worker réseau ne doit l'appeler. La disponibilité de l'interface est détectée, mais la création d'avatars via `PlaceAtMe`, la récupération fiable des références créées et leur cycle de vie ne sont pas encore implémentés.
+Le plugin interroge désormais l'interface `OBSEConsoleInterface` et vérifie sa version ainsi que le pointeur `RunScriptLine2`. Cette interface documentée permet d'exécuter une ligne de script avec une référence appelante. Toute utilisation doit rester sur la boucle principale du jeu ; aucun worker réseau ne doit l'appeler. La disponibilité de l'interface est détectée. Un prototype appelle `PlaceAtMe`, recherche la nouvelle référence dans la cellule et mémorise son FormID pour la résoudre via `LookupFormByID`. Ce chemin compile, mais sa sûreté, son rendu 3D, sa désactivation et son comportement dans les sauvegardes ne sont pas encore validés en jeu.
 
 ## 4. Protocole réseau
 
