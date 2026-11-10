@@ -23,6 +23,7 @@ constexpr std::uint16_t kProtocolVersion = 1;
 constexpr std::uint16_t kHello = 1;
 constexpr std::uint16_t kWelcome = 2;
 constexpr std::uint16_t kPlayerSnapshot = 3;
+constexpr std::uint16_t kPlayerLeave = 4;
 constexpr std::uint32_t kMaxPayload = 256;
 constexpr unsigned short kDefaultPort = 47621;
 constexpr LONG kMaxRemotePlayers = 3; // Up to four players including the host.
@@ -384,6 +385,23 @@ void UnregisterHostPeer(SOCKET peer)
     LeaveCriticalSection(&g_peerLock);
 }
 
+void RelayPlayerLeave(std::uint16_t playerId, SOCKET source)
+{
+    if (!g_peerLockReady || playerId < 2 || playerId > 4)
+        return;
+    std::vector<std::uint8_t> payload;
+    put_u16(payload, playerId);
+    EnterCriticalSection(&g_peerLock);
+    for (std::size_t i = 0; i < g_hostPeers.size(); ++i)
+    {
+        const SOCKET destination = g_hostPeers[i];
+        if (destination != INVALID_SOCKET && destination != source &&
+            !send_frame(destination, kPlayerLeave, payload))
+            Log("Warning: failed to relay a player-leave event.");
+    }
+    LeaveCriticalSection(&g_peerLock);
+}
+
 void RelaySnapshotToOtherPeers(SOCKET source, const std::vector<std::uint8_t>& payload)
 {
     if (!g_peerLockReady)
@@ -520,7 +538,16 @@ DWORD WINAPI PeerWorker(void* parameter)
         }
     }
 
+    RelayPlayerLeave(assignedPlayerId, peer);
     UnregisterHostPeer(peer);
+    if (g_remoteSnapshotLockReady)
+    {
+        const std::size_t index = static_cast<std::size_t>(assignedPlayerId - 1);
+        EnterCriticalSection(&g_remoteSnapshotLock);
+        g_hasRemoteSnapshot[index] = false;
+        g_remoteSnapshots[index] = PlayerSnapshot{};
+        LeaveCriticalSection(&g_remoteSnapshotLock);
+    }
     shutdown(peer, SD_BOTH);
     closesocket(peer);
     InterlockedDecrement(&g_connectedClients);
@@ -583,6 +610,23 @@ void KeepConnectionUntilClosed(SOCKET peer)
             std::vector<std::uint8_t> incoming;
             if (!recv_frame_any(peer, incomingType, incoming))
                 break;
+            if (incomingType == kPlayerLeave && incoming.size() == 2)
+            {
+                const std::uint16_t departedId = read_u16(incoming.data());
+                if (departedId >= 2 && departedId <= 4)
+                {
+                    lastRemoteSequence[departedId] = 0;
+                    const std::size_t index = static_cast<std::size_t>(departedId - 1);
+                    EnterCriticalSection(&g_remoteSnapshotLock);
+                    g_hasRemoteSnapshot[index] = false;
+                    g_remoteSnapshots[index] = PlayerSnapshot{};
+                    LeaveCriticalSection(&g_remoteSnapshotLock);
+                    Log("Host reported that a remote player disconnected.");
+                    continue;
+                }
+                Log("Network warning: rejected invalid player-leave event.");
+                continue;
+            }
             if (incomingType != kPlayerSnapshot || incoming.size() != 22)
             {
                 Log("Network warning: host sent an unsupported or malformed frame.");
