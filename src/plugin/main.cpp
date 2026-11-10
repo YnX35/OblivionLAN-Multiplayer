@@ -59,6 +59,9 @@ struct RemoteAvatar
     bool spawnAttempted = false;
 };
 std::array<RemoteAvatar, 4> g_remoteAvatars{};
+
+void HideRemoteAvatar(RemoteAvatar& avatar);
+void ApplyRemoteAvatar(std::size_t index, const PlayerSnapshot& snapshot, PlayerCharacter* localPlayer);
 PlayerSnapshot g_latestSnapshot{};
 bool g_hasSnapshot = false;
 DWORD g_lastSnapshotSequence = 0;
