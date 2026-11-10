@@ -45,8 +45,8 @@ struct PlayerSnapshot
     float y = 0.0f;
     float z = 0.0f;
 };
-std::array<PlayerSnapshot, 3> g_remoteSnapshots{};
-std::array<bool, 3> g_hasRemoteSnapshot{{false, false, false}};
+std::array<PlayerSnapshot, 4> g_remoteSnapshots{};
+std::array<bool, 4> g_hasRemoteSnapshot{{false, false, false, false}};
 PlayerSnapshot g_latestSnapshot{};
 bool g_hasSnapshot = false;
 DWORD g_lastSnapshotSequence = 0;
@@ -124,12 +124,12 @@ bool GameThreadPump()
     }
     if (g_remoteSnapshotLockReady)
     {
-        std::array<PlayerSnapshot, 3> pending{};
-        std::array<bool, 3> present{{false, false, false}};
+        std::array<PlayerSnapshot, 4> pending{};
+        std::array<bool, 4> present{{false, false, false, false}};
         EnterCriticalSection(&g_remoteSnapshotLock);
         pending = g_remoteSnapshots;
         present = g_hasRemoteSnapshot;
-        g_hasRemoteSnapshot = {{false, false, false}};
+        g_hasRemoteSnapshot = {{false, false, false, false}};
         LeaveCriticalSection(&g_remoteSnapshotLock);
         for (std::size_t i = 0; i < pending.size(); ++i)
         {
@@ -150,9 +150,9 @@ bool GameThreadPump()
 
 void StoreRemoteSnapshot(const PlayerSnapshot& snapshot)
 {
-    if (!g_remoteSnapshotLockReady || snapshot.playerId < 2 || snapshot.playerId > 4)
+    if (!g_remoteSnapshotLockReady || snapshot.playerId < 1 || snapshot.playerId > 4)
         return;
-    const std::size_t index = static_cast<std::size_t>(snapshot.playerId - 2);
+    const std::size_t index = static_cast<std::size_t>(snapshot.playerId - 1);
     EnterCriticalSection(&g_remoteSnapshotLock);
     g_remoteSnapshots[index] = snapshot;
     g_hasRemoteSnapshot[index] = true;
@@ -402,6 +402,58 @@ void RelaySnapshotToOtherPeers(SOCKET source, const std::vector<std::uint8_t>& p
     LeaveCriticalSection(&g_peerLock);
 }
 
+void BroadcastHostSnapshot()
+{
+    DWORD lastSentAt = 0;
+    std::uint32_t lastSequence = 0;
+    for (;;)
+    {
+        const DWORD now = GetTickCount();
+        if (now - lastSentAt >= 100 && g_snapshotLockReady)
+        {
+            PlayerSnapshot snapshot{};
+            bool available = false;
+            EnterCriticalSection(&g_snapshotLock);
+            if (g_hasSnapshot)
+            {
+                snapshot = g_latestSnapshot;
+                available = true;
+            }
+            LeaveCriticalSection(&g_snapshotLock);
+
+            if (available && snapshot.playerId == 1 &&
+                snapshot.sequence != lastSequence)
+            {
+                std::vector<std::uint8_t> payload;
+                payload.reserve(22);
+                put_u16(payload, snapshot.playerId);
+                put_u32(payload, snapshot.sequence);
+                put_u32(payload, snapshot.cellId);
+                std::uint32_t bits = 0;
+                std::memcpy(&bits, &snapshot.x, sizeof(bits)); put_u32(payload, bits);
+                std::memcpy(&bits, &snapshot.y, sizeof(bits)); put_u32(payload, bits);
+                std::memcpy(&bits, &snapshot.z, sizeof(bits)); put_u32(payload, bits);
+
+                if (g_peerLockReady)
+                {
+                    EnterCriticalSection(&g_peerLock);
+                    for (std::size_t i = 0; i < g_hostPeers.size(); ++i)
+                    {
+                        const SOCKET destination = g_hostPeers[i];
+                        if (destination != INVALID_SOCKET &&
+                            !send_frame(destination, kPlayerSnapshot, payload))
+                            Log("Warning: failed to send host snapshot to a client.");
+                    }
+                    LeaveCriticalSection(&g_peerLock);
+                }
+                lastSequence = snapshot.sequence;
+                lastSentAt = now;
+            }
+        }
+        Sleep(10);
+    }
+}
+
 struct PeerContext
 {
     SOCKET socket;
@@ -548,7 +600,7 @@ void KeepConnectionUntilClosed(SOCKET peer)
             std::memcpy(&z, &zb, sizeof(z));
             if (remoteId == 0 || remoteId == static_cast<std::uint16_t>(
                     InterlockedCompareExchange(&g_localNetworkPlayerId, 0, 0)) ||
-                remoteId < 2 || remoteId > 4 || remoteSequence == 0 ||
+                remoteId < 1 || remoteId > 4 || remoteSequence == 0 ||
                 remoteSequence <= lastRemoteSequence[remoteId] ||
                 !std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z) ||
                 std::fabs(x) > 10000000.0f || std::fabs(y) > 10000000.0f ||
@@ -646,6 +698,14 @@ DWORD WINAPI NetworkWorker(void*)
         std::snprintf(message, sizeof(message),
             "Network host listening on TCP port %u.", static_cast<unsigned>(port));
         Log(message);
+
+        InterlockedExchange(&g_localNetworkPlayerId, 1);
+        HANDLE broadcastThread = CreateThread(nullptr, 0,
+            [](void*) -> DWORD { BroadcastHostSnapshot(); return 0; }, nullptr, 0, nullptr);
+        if (broadcastThread == nullptr)
+            Log("Network warning: could not start host snapshot broadcaster.");
+        else
+            CloseHandle(broadcastThread);
 
         Log("Host is ready for up to three remote players.");
         for (;;)
